@@ -77,6 +77,25 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                     color: player.color.clone(),
                                 };
                                 let _ = state_clone.broadcaster.send(msg.to_json());
+                                
+                                // Send current players list to all clients (including new one)
+                                // This ensures new clients see existing players
+                                let players = {
+                                    let game = state_clone.game.read().await;
+                                    game.get_players()
+                                        .into_iter()
+                                        .map(|p| PlayerInfo {
+                                            player_id: p.id.to_string(),
+                                            name: p.name,
+                                            connected: p.connected,
+                                            position: p.position,
+                                            color: p.color,
+                                        })
+                                        .collect()
+                                };
+                                
+                                let list_msg = ServerMessage::PlayersList { players };
+                                let _ = state_clone.broadcaster.send(list_msg.to_json());
                             }
                             
                             ClientMessage::PlayerMove { x, y } => {
