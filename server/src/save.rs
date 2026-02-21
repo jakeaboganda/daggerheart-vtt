@@ -1,4 +1,4 @@
-//! Save/Load system for game state
+//! Save/Load system - Phase 5A: Refactored for Character/Connection architecture
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,32 +6,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-use crate::game::{GameState, Player};
+use daggerheart_engine::character::{Ancestry, Attributes, Class};
+
+use crate::game::{Character, GameState};
 use crate::protocol::Position;
 
-const SAVES_DIR: &str = "saves";
-
-/// Saved game session
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SavedSession {
-    pub id: String,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub last_saved: DateTime<Utc>,
-    pub players: Vec<SavedPlayer>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SavedPlayer {
-    pub id: String,
-    pub name: String,
-    pub position: Position,
-    pub color: String,
-    pub character: Option<SavedCharacter>,
-}
-
+/// Saved character data (without runtime resources)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedCharacter {
+    pub id: String,
     pub name: String,
     pub class: String,
     pub ancestry: String,
@@ -42,15 +25,135 @@ pub struct SavedCharacter {
     pub hope_current: u8,
     pub hope_max: u8,
     pub evasion: i32,
+    pub position: Position,
+    pub color: String,
+    pub is_npc: bool,
+}
+
+/// A saved game session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedSession {
+    pub id: String,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub last_saved: DateTime<Utc>,
+    pub characters: Vec<SavedCharacter>,
+}
+
+impl SavedCharacter {
+    fn from_character(character: &Character) -> Self {
+        Self {
+            id: character.id.to_string(),
+            name: character.name.clone(),
+            class: format!("{:?}", character.class),
+            ancestry: format!("{:?}", character.ancestry),
+            attributes: [
+                character.attributes.agility,
+                character.attributes.strength,
+                character.attributes.finesse,
+                character.attributes.instinct,
+                character.attributes.presence,
+                character.attributes.knowledge,
+            ],
+            hp_current: character.hp.current,
+            hp_max: character.hp.maximum,
+            stress: character.stress.current,
+            hope_current: character.hope.current,
+            hope_max: character.hope.maximum,
+            evasion: character.evasion,
+            position: character.position,
+            color: character.color.clone(),
+            is_npc: character.is_npc,
+        }
+    }
+
+    fn to_character(&self) -> Result<Character, String> {
+        let id = Uuid::parse_str(&self.id)
+            .map_err(|e| format!("Invalid character ID: {}", e))?;
+
+        let class = match self.class.as_str() {
+            "Bard" => Class::Bard,
+            "Druid" => Class::Druid,
+            "Guardian" => Class::Guardian,
+            "Ranger" => Class::Ranger,
+            "Rogue" => Class::Rogue,
+            "Seraph" => Class::Seraph,
+            "Sorcerer" => Class::Sorcerer,
+            "Warrior" => Class::Warrior,
+            "Wizard" => Class::Wizard,
+            _ => return Err(format!("Invalid class: {}", self.class)),
+        };
+
+        let ancestry = match self.ancestry.as_str() {
+            "Clank" => Ancestry::Clank,
+            "Daemon" => Ancestry::Daemon,
+            "Drakona" => Ancestry::Drakona,
+            "Dwarf" => Ancestry::Dwarf,
+            "Faerie" => Ancestry::Faerie,
+            "Faun" => Ancestry::Faun,
+            "Fungril" => Ancestry::Fungril,
+            "Galapa" => Ancestry::Galapa,
+            "Giant" => Ancestry::Giant,
+            "Goblin" => Ancestry::Goblin,
+            "Halfling" => Ancestry::Halfling,
+            "Human" => Ancestry::Human,
+            "Inferis" => Ancestry::Inferis,
+            "Katari" => Ancestry::Katari,
+            "Orc" => Ancestry::Orc,
+            "Ribbet" => Ancestry::Ribbet,
+            "Simiah" => Ancestry::Simiah,
+            _ => return Err(format!("Invalid ancestry: {}", self.ancestry)),
+        };
+
+        let attributes = Attributes::from_array(self.attributes)
+            .map_err(|e| format!("Invalid attributes: {}", e))?;
+
+        let mut character = if self.is_npc {
+            Character::new_npc(
+                self.name.clone(),
+                class,
+                ancestry,
+                attributes,
+                self.position,
+                self.color.clone(),
+                self.hp_max,
+            )
+        } else {
+            Character::new(
+                self.name.clone(),
+                class,
+                ancestry,
+                attributes,
+                self.position,
+                self.color.clone(),
+            )
+        };
+
+        // Override ID to preserve it
+        character.id = id;
+
+        // Restore resources to saved values
+        character.hp_current = self.hp_current;
+        character.hp_max = self.hp_max;
+        character.stress_current = self.stress;
+        character.hope_current = self.hope_current;
+        character.hope_max = self.hope_max;
+        character.evasion = self.evasion;
+        character.position = self.position;
+
+        character.restore_resources();
+
+        Ok(character)
+    }
 }
 
 impl SavedSession {
     /// Create a new saved session from game state
     pub fn from_game_state(game: &GameState, name: String) -> Self {
-        let players = game
-            .get_players()
+        let characters = game
+            .get_characters()
             .iter()
-            .map(SavedPlayer::from_player)
+            .map(|c| SavedCharacter::from_character(c))
             .collect();
 
         Self {
@@ -58,277 +161,195 @@ impl SavedSession {
             name,
             created_at: Utc::now(),
             last_saved: Utc::now(),
-            players,
+            characters,
         }
     }
 
-    /// Save to file
+    /// Save to JSON file
     pub fn save_to_file(&self) -> Result<PathBuf, String> {
-        // Ensure saves directory exists
-        fs::create_dir_all(SAVES_DIR)
-            .map_err(|e| format!("Failed to create saves directory: {}", e))?;
+        // Create saves directory if it doesn't exist
+        let saves_dir = Path::new("saves");
+        if !saves_dir.exists() {
+            fs::create_dir_all(saves_dir)
+                .map_err(|e| format!("Failed to create saves directory: {}", e))?;
+        }
 
-        // Generate filename
+        // Generate filename with timestamp
         let timestamp = self.last_saved.format("%Y%m%d_%H%M%S");
-        let safe_name = self
-            .name
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>();
-        let filename = format!("{}_{}.json", safe_name, timestamp);
-        let path = Path::new(SAVES_DIR).join(&filename);
+        let filename = format!("{}_{}.json", self.name.replace(' ', "_"), timestamp);
+        let path = saves_dir.join(filename);
 
-        // Write JSON
+        // Serialize and save
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| format!("Failed to serialize: {}", e))?;
+            .map_err(|e| format!("Failed to serialize session: {}", e))?;
 
-        fs::write(&path, json).map_err(|e| format!("Failed to write file: {}", e))?;
+        fs::write(&path, json)
+            .map_err(|e| format!("Failed to write save file: {}", e))?;
 
         Ok(path)
     }
 
-    /// Load from file
+    /// Load from JSON file
     pub fn load_from_file(path: &Path) -> Result<Self, String> {
-        let json = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
+        let json = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read save file: {}", e))?;
 
-        let mut session: SavedSession =
-            serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize: {}", e))?;
-
-        // Update last_saved timestamp
-        session.last_saved = Utc::now();
-
-        Ok(session)
+        serde_json::from_str(&json)
+            .map_err(|e| format!("Failed to parse save file: {}", e))
     }
 
-    /// List all saved sessions
+    /// List all saved sessions in the saves directory
     pub fn list_saves() -> Result<Vec<(PathBuf, String, DateTime<Utc>)>, String> {
-        if !Path::new(SAVES_DIR).exists() {
+        let saves_dir = Path::new("saves");
+        if !saves_dir.exists() {
             return Ok(Vec::new());
         }
 
-        let entries = fs::read_dir(SAVES_DIR)
+        let entries = fs::read_dir(saves_dir)
             .map_err(|e| format!("Failed to read saves directory: {}", e))?;
 
         let mut saves = Vec::new();
 
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        for entry in entries.flatten() {
             let path = entry.path();
-
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Ok(session) = SavedSession::load_from_file(&path) {
+                if let Ok(session) = Self::load_from_file(&path) {
                     saves.push((path, session.name, session.last_saved));
                 }
             }
         }
 
-        // Sort by last_saved (newest first)
+        // Sort by timestamp (newest first)
         saves.sort_by(|a, b| b.2.cmp(&a.2));
 
         Ok(saves)
     }
 
-    /// Apply this saved session to game state
+    /// Apply this saved session to a game state
+    /// This replaces all characters but does NOT touch connections
     pub fn apply_to_game(&self, game: &mut GameState) -> Result<(), String> {
-        use crate::game::Character;
-        use daggerheart_engine::{
-            character::{Ancestry, Attributes, Class},
-            combat::{HitPoints, Hope, Stress},
-        };
+        // Clear existing characters
+        game.characters.clear();
+        game.control_mapping.clear(); // Clear control mappings since characters are gone
 
-        // Clear existing players
-        game.players.clear();
-
-        // Restore players
-        for saved_player in &self.players {
-            let player_id =
-                Uuid::parse_str(&saved_player.id).map_err(|e| format!("Invalid UUID: {}", e))?;
-
-            let character = if let Some(saved_char) = &saved_player.character {
-                // Parse class
-                let class = match saved_char.class.as_str() {
-                    "Bard" => Class::Bard,
-                    "Druid" => Class::Druid,
-                    "Guardian" => Class::Guardian,
-                    "Ranger" => Class::Ranger,
-                    "Rogue" => Class::Rogue,
-                    "Seraph" => Class::Seraph,
-                    "Sorcerer" => Class::Sorcerer,
-                    "Warrior" => Class::Warrior,
-                    "Wizard" => Class::Wizard,
-                    _ => return Err(format!("Unknown class: {}", saved_char.class)),
-                };
-
-                // Parse ancestry
-                let ancestry = match saved_char.ancestry.as_str() {
-                    "Clank" => Ancestry::Clank,
-                    "Daemon" => Ancestry::Daemon,
-                    "Drakona" => Ancestry::Drakona,
-                    "Dwarf" => Ancestry::Dwarf,
-                    "Faerie" => Ancestry::Faerie,
-                    "Faun" => Ancestry::Faun,
-                    "Fungril" => Ancestry::Fungril,
-                    "Galapa" => Ancestry::Galapa,
-                    "Giant" => Ancestry::Giant,
-                    "Goblin" => Ancestry::Goblin,
-                    "Halfling" => Ancestry::Halfling,
-                    "Human" => Ancestry::Human,
-                    "Inferis" => Ancestry::Inferis,
-                    "Katari" => Ancestry::Katari,
-                    "Orc" => Ancestry::Orc,
-                    "Ribbet" => Ancestry::Ribbet,
-                    "Simiah" => Ancestry::Simiah,
-                    _ => return Err(format!("Unknown ancestry: {}", saved_char.ancestry)),
-                };
-
-                // Parse attributes
-                let attributes = Attributes::from_array(saved_char.attributes)
-                    .map_err(|e| format!("Invalid attributes: {}", e))?;
-
-                // Create character
-                let mut character =
-                    Character::new(saved_char.name.clone(), class, ancestry, attributes);
-
-                // Restore resources
-                character.hp = HitPoints::new(saved_char.hp_max);
-                if saved_char.hp_current < saved_char.hp_max {
-                    let damage = saved_char.hp_max - saved_char.hp_current;
-                    character.hp.take_damage(damage);
-                }
-
-                character.stress = Stress::new();
-                character.stress.gain(saved_char.stress);
-
-                character.hope = Hope::new(saved_char.hope_max);
-                if saved_char.hope_current < saved_char.hope_max {
-                    let spent = saved_char.hope_max - saved_char.hope_current;
-                    let _ = character.hope.spend(spent);
-                }
-
-                character.evasion = saved_char.evasion;
-
-                Some(character)
-            } else {
-                None
-            };
-
-            // Create player
-            let player = Player {
-                id: player_id,
-                name: saved_player.name.clone(),
-                connected: false, // Will reconnect
-                position: saved_player.position,
-                color: saved_player.color.clone(),
-                character,
-            };
-
-            game.players.insert(player_id, player);
+        // Restore all characters
+        for saved_char in &self.characters {
+            let character = saved_char.to_character()?;
+            game.characters.insert(character.id, character);
         }
+
+        println!("✅ Loaded {} characters from save", self.characters.len());
 
         Ok(())
-    }
-}
-
-impl SavedPlayer {
-    fn from_player(player: &Player) -> Self {
-        let character = player.character.as_ref().map(|c| SavedCharacter {
-            name: c.name.clone(),
-            class: format!("{:?}", c.class),
-            ancestry: format!("{:?}", c.ancestry),
-            attributes: [
-                c.attributes.agility,
-                c.attributes.strength,
-                c.attributes.finesse,
-                c.attributes.instinct,
-                c.attributes.presence,
-                c.attributes.knowledge,
-            ],
-            hp_current: c.hp.current,
-            hp_max: c.hp.maximum,
-            stress: c.stress.current,
-            hope_current: c.hope.current,
-            hope_max: c.hope.maximum,
-            evasion: c.evasion,
-        });
-
-        Self {
-            id: player.id.to_string(),
-            name: player.name.clone(),
-            position: player.position,
-            color: player.color.clone(),
-            character,
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use daggerheart_engine::character::{Ancestry, Attributes, Class};
+    use crate::game::GameState;
 
     #[test]
     fn test_save_and_load() {
         let mut game = GameState::new();
-        let player = game.add_player("Alice".to_string());
-
-        // Create character
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
-        game.create_character(
-            &player.id,
+        
+        // Create a character
+        let character = game.create_character(
             "Theron".to_string(),
             Class::Warrior,
             Ancestry::Human,
             attrs,
-        )
-        .unwrap();
+        );
 
-        // Save
+        // Save session
         let session = SavedSession::from_game_state(&game, "Test Session".to_string());
-        let path = session.save_to_file().unwrap();
+        assert_eq!(session.characters.len(), 1);
+        assert_eq!(session.characters[0].name, "Theron");
 
-        // Load
-        let loaded = SavedSession::load_from_file(&path).unwrap();
+        // Modify character resources
+        let char_mut = game.get_character_mut(&character.id).unwrap();
+        char_mut.hp.take_damage(2);
+        char_mut.stress.gain(1);
+        char_mut.sync_resources();
 
-        assert_eq!(loaded.name, "Test Session");
-        assert_eq!(loaded.players.len(), 1);
-        assert_eq!(loaded.players[0].name, "Alice");
-        assert!(loaded.players[0].character.is_some());
-
-        // Cleanup
-        let _ = fs::remove_file(path);
+        // Save again
+        let session2 = SavedSession::from_game_state(&game, "Modified Session".to_string());
+        assert!(session2.characters[0].hp_current < session2.characters[0].hp_max);
+        assert!(session2.characters[0].stress > 0);
     }
 
     #[test]
     fn test_apply_to_game() {
         let mut game = GameState::new();
-        let player = game.add_player("Alice".to_string());
-
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
-        game.create_character(
-            &player.id,
-            "Theron".to_string(),
-            Class::Warrior,
-            Ancestry::Human,
-            attrs,
-        )
-        .unwrap();
+        
+        // Create characters
+        game.create_character("Theron".to_string(), Class::Warrior, Ancestry::Human, attrs.clone());
+        game.create_character("Elara".to_string(), Class::Wizard, Ancestry::Faerie, attrs);
 
         // Save
         let session = SavedSession::from_game_state(&game, "Test".to_string());
 
-        // Apply to new game
+        // Create new game state and apply
         let mut new_game = GameState::new();
         session.apply_to_game(&mut new_game).unwrap();
 
-        assert_eq!(new_game.get_players().len(), 1);
-        let restored_player = &new_game.get_players()[0];
-        assert_eq!(restored_player.name, "Alice");
-        assert!(restored_player.character.is_some());
+        assert_eq!(new_game.character_count(), 2);
+        assert_eq!(new_game.get_player_characters().len(), 2);
+    }
+
+    #[test]
+    fn test_character_round_trip() {
+        let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
+        let mut character = Character::new(
+            "Theron".to_string(),
+            Class::Warrior,
+            Ancestry::Human,
+            attrs,
+            Position::new(100.0, 200.0),
+            "#3b82f6".to_string(),
+        );
+
+        // Modify resources
+        character.hp.take_damage(3);
+        character.stress.gain(2);
+        let _ = character.hope.spend(1);
+        character.sync_resources();
+
+        // Convert to saved character and back
+        let saved = SavedCharacter::from_character(&character);
+        let restored = saved.to_character().unwrap();
+
+        assert_eq!(restored.name, character.name);
+        assert_eq!(restored.hp.current, character.hp.current);
+        assert_eq!(restored.stress.current, character.stress.current);
+        assert_eq!(restored.hope.current, character.hope.current);
+        assert_eq!(restored.position.x, character.position.x);
+        assert_eq!(restored.position.y, character.position.y);
+    }
+
+    #[test]
+    fn test_npc_round_trip() {
+        let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
+        let mut npc = Character::new_npc(
+            "Goblin".to_string(),
+            Class::Rogue,
+            Ancestry::Goblin,
+            attrs,
+            Position::new(50.0, 50.0),
+            "#ff0000".to_string(),
+            8,
+        );
+
+        npc.hp.take_damage(2);
+        npc.sync_resources();
+
+        let saved = SavedCharacter::from_character(&npc);
+        let restored = saved.to_character().unwrap();
+
+        assert!(restored.is_npc);
+        assert_eq!(restored.name, "Goblin");
+        assert_eq!(restored.hp.current, 6); // 8 - 2
     }
 }

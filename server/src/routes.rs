@@ -75,11 +75,12 @@ pub async fn qr_code() -> impl IntoResponse {
 /// Get current game state
 pub async fn game_state(State(state): State<AppState>) -> impl IntoResponse {
     let game = state.game.read().await;
-    let players = game.get_players();
+    let characters = game.get_characters();
 
     Json(json!({
-        "player_count": players.len(),
-        "players": players
+        "character_count": characters.len(),
+        "connection_count": game.connection_count(),
+        "characters": characters
     }))
 }
 

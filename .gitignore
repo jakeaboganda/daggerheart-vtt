@@ -26,3 +26,4 @@ saves/*.json
 
 # Node modules (if we add build tools later)
 node_modules/
+server/saves/
