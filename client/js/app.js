@@ -113,9 +113,8 @@ function initMobileView() {
         });
     }
     
-    // Mobile tap-to-move (both canvases)
+    // Mobile tap-to-move (only the character sheet canvas)
     setupMobileCanvas('mini-canvas');
-    setupMobileCanvas('mini-canvas-basic');
 }
 
 function setupMobileCanvas(canvasId) {
@@ -224,10 +223,10 @@ function showCharacterSheet(character) {
     showPanel('char-sheet-panel');
     updateCharacterSheet(character);
     
-    // Initialize mini canvas if not already
-    if (!mapCanvas) {
-        mapCanvas = new MapCanvas('mini-canvas');
-    }
+    // Initialize/reinitialize mini canvas for character sheet
+    // (Always create fresh to ensure correct canvas element)
+    console.log('Initializing character sheet canvas...');
+    mapCanvas = new MapCanvas('mini-canvas');
 }
 
 function updateCharacterSheet(character) {
@@ -339,10 +338,8 @@ function handlePlayerJoined(payload) {
             nameDisplay.appendChild(colorDot);
         }
         
-        // Initialize mini canvas
-        if (!mapCanvas) {
-            mapCanvas = new MapCanvas('mini-canvas-basic');
-        }
+        // NOTE: Canvas initialization happens AFTER character creation
+        // See showCharacterSheet() function
     }
     
     // Add to canvas

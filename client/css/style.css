@@ -768,3 +768,28 @@ body.mobile .character-sheet {
         box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
     }
 }
+
+/* Player Info Panel */
+.player-info {
+    text-align: center;
+}
+
+.player-info .info-text {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    margin: 2rem 0;
+    padding: 1rem;
+    background: var(--bg-dark);
+    border-radius: 8px;
+}
+
+.player-info h2 {
+    color: var(--hope-color);
+    margin-bottom: 1rem;
+}
+
+.player-info .status {
+    color: #10b981;
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+}
