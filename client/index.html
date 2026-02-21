@@ -10,12 +10,38 @@
     <div id="app">
         <header>
             <h1>🗡️❤️ Daggerheart VTT</h1>
-            <p class="phase-badge">Phase 2: Map & Movement</p>
+            <p class="phase-badge">Phase 3: Daggerheart Integration</p>
         </header>
 
         <main class="tv-layout">
             <section class="map-container">
                 <canvas id="game-canvas"></canvas>
+                
+                <!-- Roll Result Overlay -->
+                <div id="roll-overlay" class="roll-overlay" style="display: none;">
+                    <div class="roll-card">
+                        <h2 id="roll-player">Player Name</h2>
+                        <div class="dice-display">
+                            <div class="die hope-die">
+                                <span class="die-label">Hope</span>
+                                <span class="die-value" id="hope-value">12</span>
+                            </div>
+                            <div class="die fear-die">
+                                <span class="die-label">Fear</span>
+                                <span class="die-value" id="fear-value">6</span>
+                            </div>
+                        </div>
+                        <div class="roll-total">
+                            <span class="total-label">Total:</span>
+                            <span class="total-value" id="total-value">18</span>
+                        </div>
+                        <div class="roll-result">
+                            <span id="controlling-die" class="controlling-badge hope">With Hope</span>
+                            <span id="success-badge" class="success-badge">SUCCESS</span>
+                            <span id="critical-badge" class="critical-badge" style="display: none;">CRITICAL!</span>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <aside class="sidebar">
@@ -39,12 +65,13 @@
         </main>
 
         <footer>
-            <p>Built with <a href="../daggerheart-engine">daggerheart-engine</a> | Phase 2: Map & Movement</p>
+            <p>Built with <a href="../daggerheart-engine">daggerheart-engine</a> | Phase 3: Daggerheart Integration</p>
         </footer>
     </div>
 
     <script src="/static/js/websocket.js"></script>
     <script src="/static/js/canvas.js"></script>
+    <script src="/static/js/character.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

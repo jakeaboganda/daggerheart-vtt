@@ -69,8 +69,31 @@ case "$PHASE" in
     
     phase3)
         echo "📋 Phase 3: Daggerheart Integration"
-        echo "⚠️  Not implemented yet"
-        exit 1
+        echo ""
+        echo "Starting server..."
+        cd server
+        
+        # Build and run server
+        cargo build --release 2>&1 | grep -v "Compiling\|Finished" || true
+        echo ""
+        echo "✅ Server starting..."
+        echo ""
+        echo "📡 Access from your network:"
+        echo "   🖥️  TV View:     http://$LOCAL_IP:3000"
+        echo "   📱 Mobile View: http://$LOCAL_IP:3000/mobile"
+        echo ""
+        echo "🎲 Phase 3 Features:"
+        echo "   ✨ Character creation (class, ancestry, attributes)"
+        echo "   📊 Character sheets on mobile"
+        echo "   🎲 Dice rolling with duality system"
+        echo "   📺 Roll results displayed on TV"
+        echo "   ❤️  HP/Stress/Hope tracking"
+        echo ""
+        echo "💡 Open TV view, join from phones, create characters, and roll!"
+        echo "Press Ctrl+C to stop the server"
+        echo ""
+        
+        cargo run --release
         ;;
     
     phase4)

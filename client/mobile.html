@@ -13,16 +13,93 @@
         </header>
 
         <main>
-            <section class="join-panel">
+            <!-- Join Panel -->
+            <section class="join-panel" id="join-panel">
                 <h2>Join Game</h2>
                 <input type="text" id="player-name" placeholder="Enter your name" />
                 <button id="join-button">Join</button>
             </section>
 
-            <section class="player-info" id="player-info" style="display: none;">
-                <h2>Welcome, <span id="player-name-display"></span>!</h2>
-                <p class="status">✅ Connected to game</p>
-                
+            <!-- Character Creation -->
+            <section class="character-creation-panel" id="char-creation-panel" style="display: none;">
+                <div id="char-creation-container"></div>
+            </section>
+
+            <!-- Character Sheet -->
+            <section class="character-sheet" id="char-sheet-panel" style="display: none;">
+                <div class="character-header">
+                    <h2 id="char-name">Character</h2>
+                    <p id="char-details">Class • Ancestry</p>
+                </div>
+
+                <div class="resources">
+                    <div class="resource-box hp">
+                        <label>HP</label>
+                        <div class="resource-bar">
+                            <span id="hp-current">6</span> / <span id="hp-max">6</span>
+                        </div>
+                        <div class="bar-container">
+                            <div class="bar-fill" id="hp-bar" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <div class="resource-box stress">
+                        <label>Stress</label>
+                        <div class="resource-value" id="stress-value">0</div>
+                    </div>
+
+                    <div class="resource-box hope">
+                        <label>Hope</label>
+                        <div class="resource-bar">
+                            <span id="hope-current">5</span> / <span id="hope-max">5</span>
+                        </div>
+                        <div class="bar-container">
+                            <div class="bar-fill hope-fill" id="hope-bar" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <div class="resource-box evasion">
+                        <label>Evasion</label>
+                        <div class="resource-value" id="evasion-value">12</div>
+                    </div>
+                </div>
+
+                <div class="attributes">
+                    <h3>Attributes</h3>
+                    <div class="attr-grid">
+                        <div class="attr-item">
+                            <span class="attr-label">Agility</span>
+                            <span class="attr-value" id="attr-agility">+0</span>
+                        </div>
+                        <div class="attr-item">
+                            <span class="attr-label">Strength</span>
+                            <span class="attr-value" id="attr-strength">+0</span>
+                        </div>
+                        <div class="attr-item">
+                            <span class="attr-label">Finesse</span>
+                            <span class="attr-value" id="attr-finesse">+0</span>
+                        </div>
+                        <div class="attr-item">
+                            <span class="attr-label">Instinct</span>
+                            <span class="attr-value" id="attr-instinct">+0</span>
+                        </div>
+                        <div class="attr-item">
+                            <span class="attr-label">Presence</span>
+                            <span class="attr-value" id="attr-presence">+0</span>
+                        </div>
+                        <div class="attr-item">
+                            <span class="attr-label">Knowledge</span>
+                            <span class="attr-value" id="attr-knowledge">+0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="roll-btn" class="btn-primary btn-large">
+                        🎲 Roll Duality Dice
+                    </button>
+                </div>
+
                 <div class="mini-map-container">
                     <p class="instructions">Tap map to move your token</p>
                     <canvas id="mini-canvas"></canvas>
@@ -30,11 +107,29 @@
                 
                 <button id="leave-button" class="leave-button">Leave Game</button>
             </section>
+
+            <!-- Player Info (no character yet) -->
+            <section class="player-info" id="player-info" style="display: none;">
+                <h2>Welcome, <span id="player-name-display"></span>!</h2>
+                <p class="status">✅ Connected to game</p>
+                
+                <button id="create-char-btn" class="btn-primary btn-large">
+                    Create Character
+                </button>
+                
+                <div class="mini-map-container">
+                    <p class="instructions">Tap map to move your token</p>
+                    <canvas id="mini-canvas-basic"></canvas>
+                </div>
+                
+                <button id="leave-button-basic" class="leave-button">Leave Game</button>
+            </section>
         </main>
     </div>
 
     <script src="/static/js/websocket.js"></script>
     <script src="/static/js/canvas.js"></script>
+    <script src="/static/js/character.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

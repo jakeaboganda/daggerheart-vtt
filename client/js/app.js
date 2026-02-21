@@ -1,12 +1,14 @@
 // Daggerheart VTT Client
-// Phase 2: Map & Movement
+// Phase 3: Daggerheart Integration
 
-console.log('🎲 Daggerheart VTT Client - Phase 2');
+console.log('🎲 Daggerheart VTT Client - Phase 3');
 
 let ws = null;
 let currentPlayerId = null;
 let currentPlayerName = null;
+let currentCharacter = null;
 let mapCanvas = null;
+let characterCreator = null;
 
 // LocalStorage keys
 const STORAGE_KEYS = {
@@ -44,13 +46,15 @@ function initDesktopView() {
 function initMobileView() {
     console.log('Initializing mobile view');
     
-    // Initialize mini canvas
-    mapCanvas = new MapCanvas('mini-canvas');
-    
     const joinButton = document.getElementById('join-button');
     const playerNameInput = document.getElementById('player-name');
     const leaveButton = document.getElementById('leave-button');
-    const moveCanvas = document.getElementById('mini-canvas');
+    const leaveButtonBasic = document.getElementById('leave-button-basic');
+    const createCharBtn = document.getElementById('create-char-btn');
+    const rollBtn = document.getElementById('roll-btn');
+    
+    // Initialize character creator
+    characterCreator = new CharacterCreator();
     
     // Check if we have a saved session
     const savedName = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME);
@@ -90,35 +94,54 @@ function initMobileView() {
         });
     }
     
-    // Mobile tap-to-move
-    if (moveCanvas) {
-        moveCanvas.addEventListener('click', (e) => {
-            if (currentPlayerId && ws) {
-                const pos = mapCanvas.getClickPosition(e);
-                console.log('Tap to move:', pos);
-                ws.send('player_move', { x: pos.x, y: pos.y });
-            }
-        });
-        
-        moveCanvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            if (currentPlayerId && ws && e.changedTouches.length > 0) {
-                const touch = e.changedTouches[0];
-                const pos = mapCanvas.getClickPosition(touch);
-                console.log('Touch to move:', pos);
-                ws.send('player_move', { x: pos.x, y: pos.y });
-            }
+    if (leaveButtonBasic) {
+        leaveButtonBasic.addEventListener('click', () => {
+            leaveGame();
         });
     }
+    
+    if (createCharBtn) {
+        createCharBtn.addEventListener('click', () => {
+            showCharacterCreation();
+        });
+    }
+    
+    if (rollBtn) {
+        rollBtn.addEventListener('click', () => {
+            rollDuality();
+        });
+    }
+    
+    // Mobile tap-to-move (both canvases)
+    setupMobileCanvas('mini-canvas');
+    setupMobileCanvas('mini-canvas-basic');
+}
+
+function setupMobileCanvas(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    
+    canvas.addEventListener('click', (e) => {
+        if (currentPlayerId && ws && mapCanvas) {
+            const pos = mapCanvas.getClickPosition(e);
+            console.log('Tap to move:', pos);
+            ws.send('player_move', { x: pos.x, y: pos.y });
+        }
+    });
+    
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (currentPlayerId && ws && mapCanvas && e.changedTouches.length > 0) {
+            const touch = e.changedTouches[0];
+            const pos = mapCanvas.getClickPosition(touch);
+            console.log('Touch to move:', pos);
+            ws.send('player_move', { x: pos.x, y: pos.y });
+        }
+    });
 }
 
 function autoRejoin(playerName) {
     console.log('Auto-rejoining as:', playerName);
-    
-    // Update UI immediately
-    document.querySelector('.join-panel').style.display = 'none';
-    document.getElementById('player-info').style.display = 'block';
-    document.getElementById('player-name-display').textContent = playerName;
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
@@ -146,11 +169,6 @@ function joinGame(playerName) {
     // Wait a bit for connection, then send join message
     setTimeout(() => {
         ws.send('player_join', { name: playerName });
-        
-        // Update UI
-        document.querySelector('.join-panel').style.display = 'none';
-        document.getElementById('player-info').style.display = 'block';
-        document.getElementById('player-name-display').textContent = playerName;
     }, 500);
 }
 
@@ -172,12 +190,90 @@ function leaveGame() {
     }
     
     // Reset UI
-    document.querySelector('.join-panel').style.display = 'block';
-    document.getElementById('player-info').style.display = 'none';
+    showPanel('join-panel');
     document.getElementById('player-name').value = '';
     
     currentPlayerName = null;
     currentPlayerId = null;
+    currentCharacter = null;
+}
+
+function showPanel(panelId) {
+    // Hide all panels
+    const panels = ['join-panel', 'player-info', 'char-creation-panel', 'char-sheet-panel'];
+    panels.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    
+    // Show requested panel
+    const panel = document.getElementById(panelId);
+    if (panel) panel.style.display = 'block';
+}
+
+function showCharacterCreation() {
+    showPanel('char-creation-panel');
+    const container = document.getElementById('char-creation-container');
+    characterCreator.init(container);
+}
+
+function showCharacterSheet(character) {
+    showPanel('char-sheet-panel');
+    updateCharacterSheet(character);
+    
+    // Initialize mini canvas if not already
+    if (!mapCanvas) {
+        mapCanvas = new MapCanvas('mini-canvas');
+    }
+}
+
+function updateCharacterSheet(character) {
+    currentCharacter = character;
+    
+    // Update header
+    document.getElementById('char-name').textContent = character.name;
+    document.getElementById('char-details').textContent = `${character.class} • ${character.ancestry}`;
+    
+    // Update resources
+    document.getElementById('hp-current').textContent = character.hp.current;
+    document.getElementById('hp-max').textContent = character.hp.maximum;
+    const hpPercent = (character.hp.current / character.hp.maximum) * 100;
+    document.getElementById('hp-bar').style.width = `${hpPercent}%`;
+    
+    document.getElementById('stress-value').textContent = character.stress;
+    
+    document.getElementById('hope-current').textContent = character.hope.current;
+    document.getElementById('hope-max').textContent = character.hope.maximum;
+    const hopePercent = (character.hope.current / character.hope.maximum) * 100;
+    document.getElementById('hope-bar').style.width = `${hopePercent}%`;
+    
+    document.getElementById('evasion-value').textContent = character.evasion;
+    
+    // Update attributes
+    const attrs = character.attributes;
+    document.getElementById('attr-agility').textContent = formatModifier(attrs.agility);
+    document.getElementById('attr-strength').textContent = formatModifier(attrs.strength);
+    document.getElementById('attr-finesse').textContent = formatModifier(attrs.finesse);
+    document.getElementById('attr-instinct').textContent = formatModifier(attrs.instinct);
+    document.getElementById('attr-presence').textContent = formatModifier(attrs.presence);
+    document.getElementById('attr-knowledge').textContent = formatModifier(attrs.knowledge);
+}
+
+function formatModifier(value) {
+    return value >= 0 ? `+${value}` : `${value}`;
+}
+
+function rollDuality() {
+    if (!ws) return;
+    
+    // TODO: Add modifier selection UI
+    const modifier = 0;
+    const withAdvantage = false;
+    
+    ws.send('roll_duality', {
+        modifier,
+        with_advantage: withAdvantage,
+    });
 }
 
 function handleServerMessage(message) {
@@ -196,6 +292,15 @@ function handleServerMessage(message) {
         case 'player_moved':
             handlePlayerMoved(payload);
             break;
+        case 'character_created':
+            handleCharacterCreated(payload);
+            break;
+        case 'character_updated':
+            handleCharacterUpdated(payload);
+            break;
+        case 'roll_result':
+            handleRollResult(payload);
+            break;
         case 'error':
             handleError(payload);
             break;
@@ -213,21 +318,27 @@ function handlePlayerJoined(payload) {
         currentPlayerId = player_id;
         console.log('Set our player ID:', currentPlayerId);
         
-        // Update mobile UI to show our color
-        const playerInfo = document.getElementById('player-info');
-        if (playerInfo) {
-            const colorDot = document.createElement('span');
-            colorDot.style.display = 'inline-block';
-            colorDot.style.width = '20px';
-            colorDot.style.height = '20px';
-            colorDot.style.borderRadius = '50%';
-            colorDot.style.backgroundColor = color;
-            colorDot.style.marginLeft = '10px';
-            colorDot.style.verticalAlign = 'middle';
-            const nameDisplay = document.getElementById('player-name-display');
-            if (nameDisplay && !nameDisplay.querySelector('span')) {
-                nameDisplay.appendChild(colorDot);
-            }
+        // Show player info panel (no character yet)
+        showPanel('player-info');
+        document.getElementById('player-name-display').textContent = name;
+        
+        // Add color dot
+        const colorDot = document.createElement('span');
+        colorDot.style.display = 'inline-block';
+        colorDot.style.width = '20px';
+        colorDot.style.height = '20px';
+        colorDot.style.borderRadius = '50%';
+        colorDot.style.backgroundColor = color;
+        colorDot.style.marginLeft = '10px';
+        colorDot.style.verticalAlign = 'middle';
+        const nameDisplay = document.getElementById('player-name-display');
+        if (nameDisplay && !nameDisplay.querySelector('span')) {
+            nameDisplay.appendChild(colorDot);
+        }
+        
+        // Initialize mini canvas
+        if (!mapCanvas) {
+            mapCanvas = new MapCanvas('mini-canvas-basic');
         }
     }
     
@@ -283,6 +394,94 @@ function handlePlayerMoved(payload) {
     if (mapCanvas) {
         mapCanvas.updatePlayerPosition(player_id, position);
     }
+}
+
+function handleCharacterCreated(payload) {
+    const { player_id, character } = payload;
+    console.log('Character created:', character);
+    
+    // If it's our character, show character sheet
+    if (player_id === currentPlayerId) {
+        showCharacterSheet(character);
+    }
+}
+
+function handleCharacterUpdated(payload) {
+    const { player_id, character } = payload;
+    console.log('Character updated:', character);
+    
+    // If it's our character, update sheet
+    if (player_id === currentPlayerId) {
+        updateCharacterSheet(character);
+    }
+}
+
+function handleRollResult(payload) {
+    const { player_id, player_name, roll } = payload;
+    console.log(`${player_name} rolled:`, roll);
+    
+    // Show roll result on TV
+    if (!window.location.pathname.includes('mobile')) {
+        showRollResultOnTV(player_name, roll);
+    }
+    
+    // If on mobile and it's our roll, could show feedback
+    if (player_id === currentPlayerId) {
+        console.log('Your roll result:', roll);
+        // Could add mobile-specific feedback here
+    }
+}
+
+function showRollResultOnTV(playerName, roll) {
+    const overlay = document.getElementById('roll-overlay');
+    if (!overlay) return;
+    
+    // Update content
+    document.getElementById('roll-player').textContent = playerName;
+    document.getElementById('hope-value').textContent = roll.hope;
+    document.getElementById('fear-value').textContent = roll.fear;
+    document.getElementById('total-value').textContent = roll.total;
+    
+    // Update controlling die badge
+    const controllingBadge = document.getElementById('controlling-die');
+    controllingBadge.className = 'controlling-badge';
+    if (roll.controlling_die === 'Hope') {
+        controllingBadge.classList.add('hope');
+        controllingBadge.textContent = 'With Hope';
+    } else if (roll.controlling_die === 'Fear') {
+        controllingBadge.classList.add('fear');
+        controllingBadge.textContent = 'With Fear';
+    } else {
+        controllingBadge.classList.add('tied');
+        controllingBadge.textContent = 'Tied';
+    }
+    
+    // Update success badge
+    const successBadge = document.getElementById('success-badge');
+    successBadge.className = 'success-badge';
+    if (roll.is_success) {
+        successBadge.classList.add('success');
+        successBadge.textContent = 'SUCCESS';
+    } else {
+        successBadge.classList.add('failure');
+        successBadge.textContent = 'FAILURE';
+    }
+    
+    // Show/hide critical badge
+    const criticalBadge = document.getElementById('critical-badge');
+    if (roll.is_critical) {
+        criticalBadge.style.display = 'block';
+    } else {
+        criticalBadge.style.display = 'none';
+    }
+    
+    // Show overlay
+    overlay.style.display = 'block';
+    
+    // Hide after 4 seconds
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 4000);
 }
 
 function handleError(payload) {
@@ -365,3 +564,7 @@ async function loadQRCode() {
         console.error('Failed to load QR code:', error);
     }
 }
+
+// Make ws and characterCreator globally accessible for character.js
+window.ws = ws;
+window.characterCreator = characterCreator;
