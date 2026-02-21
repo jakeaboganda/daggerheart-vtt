@@ -5,6 +5,13 @@ console.log('🎲 Daggerheart VTT Client - Phase 1');
 
 let ws = null;
 let currentPlayerId = null;
+let currentPlayerName = null;
+
+// LocalStorage keys
+const STORAGE_KEYS = {
+    PLAYER_NAME: 'dh_vtt_player_name',
+    SESSION_ACTIVE: 'dh_vtt_session_active'
+};
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing client...');
@@ -35,6 +42,21 @@ function initMobileView() {
     
     const joinButton = document.getElementById('join-button');
     const playerNameInput = document.getElementById('player-name');
+    const leaveButton = document.getElementById('leave-button');
+    
+    // Check if we have a saved session
+    const savedName = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME);
+    const sessionActive = localStorage.getItem(STORAGE_KEYS.SESSION_ACTIVE) === 'true';
+    
+    if (savedName && sessionActive) {
+        console.log('Found saved session, auto-rejoining as:', savedName);
+        currentPlayerName = savedName;
+        
+        // Auto-rejoin
+        setTimeout(() => {
+            autoRejoin(savedName);
+        }, 500);
+    }
     
     if (joinButton) {
         joinButton.addEventListener('click', () => {
@@ -53,10 +75,40 @@ function initMobileView() {
             }
         });
     }
+    
+    if (leaveButton) {
+        leaveButton.addEventListener('click', () => {
+            leaveGame();
+        });
+    }
+}
+
+function autoRejoin(playerName) {
+    console.log('Auto-rejoining as:', playerName);
+    
+    // Update UI immediately
+    document.querySelector('.join-panel').style.display = 'none';
+    document.getElementById('player-info').style.display = 'block';
+    document.getElementById('player-name-display').textContent = playerName;
+    
+    // Connect to WebSocket
+    ws = new WebSocketClient(handleServerMessage);
+    ws.connect();
+    
+    // Send join message
+    setTimeout(() => {
+        ws.send('player_join', { name: playerName });
+    }, 500);
 }
 
 function joinGame(playerName) {
     console.log('Joining game as:', playerName);
+    
+    currentPlayerName = playerName;
+    
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.PLAYER_NAME, playerName);
+    localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'true');
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
@@ -71,6 +123,27 @@ function joinGame(playerName) {
         document.getElementById('player-info').style.display = 'block';
         document.getElementById('player-name-display').textContent = playerName;
     }, 500);
+}
+
+function leaveGame() {
+    console.log('Leaving game');
+    
+    // Clear localStorage
+    localStorage.removeItem(STORAGE_KEYS.PLAYER_NAME);
+    localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'false');
+    
+    // Disconnect WebSocket
+    if (ws) {
+        ws.disconnect();
+    }
+    
+    // Reset UI
+    document.querySelector('.join-panel').style.display = 'block';
+    document.getElementById('player-info').style.display = 'none';
+    document.getElementById('player-name').value = '';
+    
+    currentPlayerName = null;
+    currentPlayerId = null;
 }
 
 function handleServerMessage(message) {
@@ -97,6 +170,12 @@ function handleServerMessage(message) {
 function handlePlayerJoined(payload) {
     const { player_id, name } = payload;
     console.log(`Player joined: ${name} (${player_id})`);
+    
+    // Track our own player ID
+    if (name === currentPlayerName) {
+        currentPlayerId = player_id;
+        console.log('Set our player ID:', currentPlayerId);
+    }
     
     // Add to players list if we're on desktop
     if (!window.location.pathname.includes('mobile')) {

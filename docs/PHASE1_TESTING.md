@@ -119,6 +119,20 @@ cargo run
 2. Close one mobile tab
 3. **Expected:** TV removes that player, other player remains
 
+### Test 7: Session Persistence (NEW!)
+1. Join from mobile browser
+2. **Refresh the page** (F5 or pull-to-refresh)
+3. **Expected:** Automatically rejoins with same name
+4. **Note:** Session is saved in browser localStorage
+5. Click "Leave Game" button to clear session
+
+### Test 8: Leave Game Button (NEW!)
+1. Join from mobile
+2. Click "Leave Game" button
+3. **Expected:** Disconnects cleanly, returns to join screen
+4. **Expected:** TV removes player from list
+5. **Expected:** Session cleared (won't auto-rejoin on refresh)
+
 ---
 
 ## 🐛 Debugging
@@ -191,6 +205,8 @@ Phase 1 is successful if you can:
 - ✅ See player name appear on TV
 - ✅ Have 3+ players connected simultaneously
 - ✅ Players disconnect cleanly
+- ✅ **Session persists on page refresh** (auto-rejoin)
+- ✅ **Leave Game button works** (clean disconnect + clear session)
 
 ---
 
@@ -206,10 +222,19 @@ Once Phase 1 is verified, we'll move to **Phase 2: Basic Map & Movement**:
 
 ## 📝 Notes
 
-- Phase 1 uses in-memory state (no persistence)
+- Phase 1 uses in-memory state (no persistence on server)
+- **Client sessions persist** using browser localStorage
+- **Auto-rejoin** happens automatically on page refresh
 - WebSocket reconnection is automatic
 - Player colors not yet implemented (Phase 2)
 - No character data yet (Phase 3)
+
+### How Session Persistence Works
+- Player name is saved to **localStorage** when you join
+- On page refresh, the app automatically rejoins with saved name
+- Click "Leave Game" to clear session and disconnect properly
+- Closing the tab without "Leave Game" will auto-rejoin on next visit
+- localStorage is per-browser (different browsers = different sessions)
 
 ---
 
