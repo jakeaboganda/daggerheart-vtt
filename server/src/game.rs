@@ -5,7 +5,7 @@
 //! - Character: Persistent game entity (survives restarts, can be controlled by any connection)
 //! - Control mapping: Connection → Character relationship
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -206,14 +206,12 @@ impl Character {
 #[derive(Debug, Clone)]
 pub struct Connection {
     pub id: Uuid,
-    pub connected_at: std::time::SystemTime,
 }
 
 impl Connection {
     pub fn new() -> Self {
         Self {
             id: Uuid::new_v4(),
-            connected_at: std::time::SystemTime::now(),
         }
     }
 }

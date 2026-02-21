@@ -9,8 +9,7 @@ use axum::{
     response::Response,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use daggerheart_engine::character::{Ancestry, Attributes, Class};
@@ -457,7 +456,7 @@ async fn send_characters_list(
 }
 
 /// Broadcast characters list to all connections
-async fn broadcast_characters_list(state: &AppState) {
+async fn broadcast_characters_list(_state: &AppState) {
     // We can't personalize broadcasts, so we'll send a generic list
     // Clients will need to request full details separately if needed
     // For now, just notify that the list changed
@@ -494,6 +493,8 @@ fn build_character_list(game: &GameState, conn_id: &Uuid) -> Vec<CharacterInfo> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
 
     #[test]
     fn test_app_state_clone() {
