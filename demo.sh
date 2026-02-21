@@ -5,6 +5,12 @@ set -e
 
 PHASE="${1:-phase1}"
 
+# Get local IP
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+if [ -z "$LOCAL_IP" ]; then
+    LOCAL_IP="localhost"
+fi
+
 echo "🎲 Daggerheart VTT Demo"
 echo "========================"
 echo "Running: $PHASE"
@@ -20,11 +26,13 @@ case "$PHASE" in
         # Build and run server
         cargo build --release 2>&1 | grep -v "Compiling\|Finished" || true
         echo ""
-        echo "✅ Server starting on http://localhost:3000"
+        echo "✅ Server starting..."
         echo ""
-        echo "🖥️  TV View:     http://localhost:3000"
-        echo "📱 Mobile View: http://localhost:3000/mobile"
+        echo "📡 Access from your network:"
+        echo "   🖥️  TV View:     http://$LOCAL_IP:3000"
+        echo "   📱 Mobile View: http://$LOCAL_IP:3000/mobile"
         echo ""
+        echo "💡 Open TV view on your browser, then scan QR code with phone!"
         echo "Press Ctrl+C to stop the server"
         echo ""
         

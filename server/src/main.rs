@@ -10,6 +10,7 @@ use axum::{
     routing::{any, get},
     Router,
 };
+use std::net::UdpSocket;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::services::ServeDir;
@@ -18,6 +19,21 @@ use tracing_subscriber;
 use crate::game::GameState;
 use crate::websocket::AppState;
 
+/// Get the local network IP address
+fn get_local_ip() -> String {
+    match UdpSocket::bind("0.0.0.0:0") {
+        Ok(socket) => {
+            if socket.connect("8.8.8.8:80").is_ok() {
+                if let Ok(addr) = socket.local_addr() {
+                    return addr.ip().to_string();
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    "localhost".to_string()
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
@@ -25,6 +41,9 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("🎲 Daggerheart VTT Server - Phase 1");
     tracing::info!("====================================");
+
+    // Get local IP
+    let local_ip = get_local_ip();
 
     // Create game state
     let game_state = Arc::new(RwLock::new(GameState::new()));
@@ -53,10 +72,16 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     
     tracing::info!("✅ Server listening on http://{}", addr);
-    tracing::info!("🖥️  TV View:     http://localhost:3000");
-    tracing::info!("📱 Mobile View: http://localhost:3000/mobile");
-    tracing::info!("🔌 WebSocket:   ws://localhost:3000/ws");
     tracing::info!("");
+    tracing::info!("📡 Network Access:");
+    tracing::info!("   Local IP:    http://{}:3000", local_ip);
+    tracing::info!("   Localhost:   http://localhost:3000");
+    tracing::info!("");
+    tracing::info!("🖥️  TV View:     http://{}:3000", local_ip);
+    tracing::info!("📱 Mobile View: http://{}:3000/mobile", local_ip);
+    tracing::info!("🔌 WebSocket:   ws://{}:3000/ws", local_ip);
+    tracing::info!("");
+    tracing::info!("💡 Scan the QR code on TV to join from your phone!");
     tracing::info!("Press Ctrl+C to stop the server");
 
     // Start server

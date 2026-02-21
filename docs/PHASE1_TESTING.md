@@ -14,16 +14,31 @@ cd /home/jake/.openclaw/workspace/daggerheart-vtt
 ./demo.sh phase1
 ```
 
+The server will automatically detect your local network IP and display it.
+
 ### Manual Start
 ```bash
 # Terminal 1: Start server
 cd server
 cargo run
 
+# The server will show your local IP address
+# Example output:
+# 📡 Network Access:
+#    Local IP:    http://192.168.1.119:3000
+#    Localhost:   http://localhost:3000
+
 # Open in browsers:
-# TV: http://localhost:3000
-# Mobile: http://localhost:3000/mobile
+# TV (same machine):      http://localhost:3000
+# TV (network):           http://192.168.1.119:3000
+# Phone (same network):   Scan QR code or use http://192.168.1.119:3000/mobile
 ```
+
+### Network Setup
+- Server binds to `0.0.0.0:3000` (accessible from network)
+- QR code uses your **local IP address** automatically
+- Works on same WiFi network (no router config needed)
+- For testing on same machine, use `localhost`
 
 ---
 
@@ -82,15 +97,24 @@ cargo run
 ### Test 3: QR Code
 1. Open TV view
 2. **Expected:** QR code displays (black/white squares)
-3. **Expected:** URL shows: `http://localhost:3000/mobile`
-4. Optional: Scan QR with phone camera → should open mobile view
+3. **Expected:** URL shows your local IP: `http://192.168.1.x:3000/mobile`
+4. **Try:** Scan QR with phone camera → should open mobile view
+5. **Note:** Phone must be on same WiFi network
 
-### Test 4: Real-Time Updates
+### Test 4: External Device (Phone)
+1. Make sure phone is on **same WiFi network** as server
+2. Open TV view to see QR code
+3. On phone: Open camera → scan QR code → opens browser
+4. **OR** manually type IP: `http://192.168.1.x:3000/mobile`
+5. Enter name → Join
+6. **Expected:** TV shows your name appear
+
+### Test 5: Real-Time Updates
 1. Have TV view open
 2. Join player from mobile
 3. **Expected:** Player appears on TV **immediately** (no page refresh needed)
 
-### Test 5: Disconnection
+### Test 6: Disconnection
 1. Have 2 players connected
 2. Close one mobile tab
 3. **Expected:** TV removes that player, other player remains
@@ -141,8 +165,20 @@ Player left: Alice (uuid)
 
 **"Connection refused" error:**
 - Make sure server is running (`cargo run`)
-- Check firewall settings
-- Try http://127.0.0.1:3000 instead
+- Check firewall settings (may need to allow port 3000)
+- Verify phone is on **same WiFi network**
+- Try http://127.0.0.1:3000 instead (for same machine)
+
+**QR code shows localhost instead of IP:**
+- This shouldn't happen anymore, but if it does:
+- Check server logs for the detected IP
+- Manually navigate to `http://<your-ip>:3000/mobile` on phone
+
+**Phone can't connect to IP:**
+- Verify WiFi: Phone and server on same network
+- Check firewall on server machine (may block incoming connections)
+- Try pinging server IP from phone (use network tools app)
+- Some networks block device-to-device communication (e.g., public WiFi)
 
 ---
 
