@@ -28,6 +28,7 @@ tracing-subscriber.workspace = true
 # Utilities
 uuid.workspace = true
 qrcode.workspace = true
+chrono.workspace = true
 
 # Game engine
 daggerheart-engine.workspace = true

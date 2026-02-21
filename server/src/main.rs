@@ -1,9 +1,10 @@
 // Daggerheart VTT Server
-// Phase 1: Foundation & Connection
+// Phase 4: Save/Load & GM Controls
 
 mod game;
 mod protocol;
 mod routes;
+mod save;
 mod websocket;
 
 use axum::{
@@ -56,8 +57,12 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(routes::index))
         .route("/mobile", get(routes::mobile))
+        .route("/gm", get(routes::gm))
         .route("/api/qr-code", get(routes::qr_code))
         .route("/api/game-state", get(routes::game_state))
+        .route("/api/save", axum::routing::post(routes::save_game))
+        .route("/api/saves", get(routes::list_saves))
+        .route("/api/load", axum::routing::post(routes::load_game))
         .route("/ws", any(websocket::websocket_handler))
         // Serve static files from client directory
         .nest_service("/static", ServeDir::new("../client"))

@@ -112,7 +112,7 @@ pub struct Player {
 #[derive(Debug, Clone, Default)]
 pub struct GameState {
     pub players: HashMap<Uuid, Player>,
-    color_index: usize,
+    pub(crate) color_index: usize,
 }
 
 impl GameState {
