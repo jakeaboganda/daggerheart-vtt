@@ -41,8 +41,30 @@ case "$PHASE" in
     
     phase2)
         echo "📋 Phase 2: Basic Map & Movement"
-        echo "⚠️  Not implemented yet"
-        exit 1
+        echo ""
+        echo "Starting server..."
+        cd server
+        
+        # Build and run server
+        cargo build --release 2>&1 | grep -v "Compiling\|Finished" || true
+        echo ""
+        echo "✅ Server starting..."
+        echo ""
+        echo "📡 Access from your network:"
+        echo "   🖥️  TV View:     http://$LOCAL_IP:3000"
+        echo "   📱 Mobile View: http://$LOCAL_IP:3000/mobile"
+        echo ""
+        echo "🗺️  Phase 2 Features:"
+        echo "   ✨ 2D map with player tokens"
+        echo "   🎨 Each player has unique color"
+        echo "   📍 Tap mobile screen to move"
+        echo "   🔄 Real-time movement sync"
+        echo ""
+        echo "💡 Open TV view, then join from phones and move around!"
+        echo "Press Ctrl+C to stop the server"
+        echo ""
+        
+        cargo run --release
         ;;
     
     phase3)

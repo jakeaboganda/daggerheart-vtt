@@ -60,6 +60,36 @@ main {
     width: 100%;
 }
 
+/* TV Layout with Map */
+.tv-layout {
+    display: flex;
+    gap: 2rem;
+}
+
+.map-container {
+    flex: 1;
+    background: var(--bg-medium);
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#game-canvas {
+    border: 2px solid var(--hope-color);
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    cursor: crosshair;
+    background: #1a1a1a;
+}
+
+.sidebar {
+    width: 350px;
+    flex-shrink: 0;
+}
+
 section {
     background: var(--bg-medium);
     border-radius: 12px;
@@ -219,4 +249,26 @@ body.mobile main {
 
 .leave-button:active {
     transform: scale(0.98);
+}
+
+/* Mobile Mini Map */
+.mini-map-container {
+    margin: 2rem 0;
+    text-align: center;
+}
+
+.mini-map-container .instructions {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+#mini-canvas {
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    background: #1a1a1a;
+    max-width: 100%;
+    height: auto;
+    touch-action: none;
+    cursor: pointer;
 }

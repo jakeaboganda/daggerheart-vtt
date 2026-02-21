@@ -9,7 +9,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::game::SharedGameState;
-use crate::protocol::{ClientMessage, ServerMessage};
+use crate::protocol::{ClientMessage, PlayerInfo, ServerMessage};
 
 /// Broadcast channel for server messages
 pub type Broadcaster = broadcast::Sender<String>;
@@ -66,14 +66,39 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                 
                                 player_id = Some(player.id);
                                 
-                                tracing::info!("Player joined: {} ({})", player.name, player.id);
+                                tracing::info!("Player joined: {} ({}) at {:?}", 
+                                    player.name, player.id, player.position);
                                 
-                                // Broadcast player joined
+                                // Broadcast player joined with position and color
                                 let msg = ServerMessage::PlayerJoined {
                                     player_id: player.id.to_string(),
                                     name: player.name.clone(),
+                                    position: player.position,
+                                    color: player.color.clone(),
                                 };
                                 let _ = state_clone.broadcaster.send(msg.to_json());
+                            }
+                            
+                            ClientMessage::PlayerMove { x, y } => {
+                                if let Some(pid) = player_id {
+                                    // Update position in game state
+                                    let position = crate::protocol::Position::new(x, y);
+                                    let updated = {
+                                        let mut game = state_clone.game.write().await;
+                                        game.update_position(&pid, position)
+                                    };
+                                    
+                                    if updated {
+                                        tracing::debug!("Player {} moved to ({}, {})", pid, x, y);
+                                        
+                                        // Broadcast movement
+                                        let msg = ServerMessage::PlayerMoved {
+                                            player_id: pid.to_string(),
+                                            position,
+                                        };
+                                        let _ = state_clone.broadcaster.send(msg.to_json());
+                                    }
+                                }
                             }
                         }
                     }

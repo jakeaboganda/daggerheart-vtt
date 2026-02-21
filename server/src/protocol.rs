@@ -1,7 +1,29 @@
 //! WebSocket message protocol
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+
+/// Position on the map
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Position {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl Position {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+    
+    /// Random position within map bounds
+    pub fn random(width: f32, height: f32) -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        Self {
+            x: rng.gen_range(50.0..width - 50.0),
+            y: rng.gen_range(50.0..height - 50.0),
+        }
+    }
+}
 
 /// Client → Server messages
 #[derive(Debug, Clone, Deserialize)]
@@ -9,6 +31,9 @@ use uuid::Uuid;
 pub enum ClientMessage {
     #[serde(rename = "player_join")]
     PlayerJoin { name: String },
+    
+    #[serde(rename = "player_move")]
+    PlayerMove { x: f32, y: f32 },
 }
 
 /// Server → Client messages
@@ -19,6 +44,8 @@ pub enum ServerMessage {
     PlayerJoined {
         player_id: String,
         name: String,
+        position: Position,
+        color: String,
     },
     
     #[serde(rename = "player_left")]
@@ -32,6 +59,12 @@ pub enum ServerMessage {
         players: Vec<PlayerInfo>,
     },
     
+    #[serde(rename = "player_moved")]
+    PlayerMoved {
+        player_id: String,
+        position: Position,
+    },
+    
     #[serde(rename = "error")]
     Error {
         message: String,
@@ -43,6 +76,8 @@ pub struct PlayerInfo {
     pub player_id: String,
     pub name: String,
     pub connected: bool,
+    pub position: Position,
+    pub color: String,
 }
 
 impl ServerMessage {
@@ -62,6 +97,21 @@ mod tests {
         
         match msg {
             ClientMessage::PlayerJoin { name } => assert_eq!(name, "Alice"),
+            _ => panic!("Wrong message type"),
+        }
+    }
+    
+    #[test]
+    fn test_player_move_deserialize() {
+        let json = r#"{"type":"player_move","payload":{"x":100.0,"y":200.0}}"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+        
+        match msg {
+            ClientMessage::PlayerMove { x, y } => {
+                assert_eq!(x, 100.0);
+                assert_eq!(y, 200.0);
+            },
+            _ => panic!("Wrong message type"),
         }
     }
 
@@ -70,6 +120,8 @@ mod tests {
         let msg = ServerMessage::PlayerJoined {
             player_id: "123".to_string(),
             name: "Bob".to_string(),
+            position: Position::new(100.0, 200.0),
+            color: "#3b82f6".to_string(),
         };
         
         let json = msg.to_json();

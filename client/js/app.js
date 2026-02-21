@@ -1,11 +1,12 @@
 // Daggerheart VTT Client
-// Phase 1: Foundation & Connection
+// Phase 2: Map & Movement
 
-console.log('🎲 Daggerheart VTT Client - Phase 1');
+console.log('🎲 Daggerheart VTT Client - Phase 2');
 
 let ws = null;
 let currentPlayerId = null;
 let currentPlayerName = null;
+let mapCanvas = null;
 
 // LocalStorage keys
 const STORAGE_KEYS = {
@@ -29,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function initDesktopView() {
     console.log('Initializing desktop/TV view');
     
+    // Initialize canvas
+    mapCanvas = new MapCanvas('game-canvas');
+    
     // Load QR code
     loadQRCode();
     
@@ -40,9 +44,13 @@ function initDesktopView() {
 function initMobileView() {
     console.log('Initializing mobile view');
     
+    // Initialize mini canvas
+    mapCanvas = new MapCanvas('mini-canvas');
+    
     const joinButton = document.getElementById('join-button');
     const playerNameInput = document.getElementById('player-name');
     const leaveButton = document.getElementById('leave-button');
+    const moveCanvas = document.getElementById('mini-canvas');
     
     // Check if we have a saved session
     const savedName = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME);
@@ -79,6 +87,27 @@ function initMobileView() {
     if (leaveButton) {
         leaveButton.addEventListener('click', () => {
             leaveGame();
+        });
+    }
+    
+    // Mobile tap-to-move
+    if (moveCanvas) {
+        moveCanvas.addEventListener('click', (e) => {
+            if (currentPlayerId && ws) {
+                const pos = mapCanvas.getClickPosition(e);
+                console.log('Tap to move:', pos);
+                ws.send('player_move', { x: pos.x, y: pos.y });
+            }
+        });
+        
+        moveCanvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (currentPlayerId && ws && e.changedTouches.length > 0) {
+                const touch = e.changedTouches[0];
+                const pos = mapCanvas.getClickPosition(touch);
+                console.log('Touch to move:', pos);
+                ws.send('player_move', { x: pos.x, y: pos.y });
+            }
         });
     }
 }
@@ -137,6 +166,11 @@ function leaveGame() {
         ws.disconnect();
     }
     
+    // Clear canvas
+    if (mapCanvas) {
+        mapCanvas.clearPlayers();
+    }
+    
     // Reset UI
     document.querySelector('.join-panel').style.display = 'block';
     document.getElementById('player-info').style.display = 'none';
@@ -159,6 +193,9 @@ function handleServerMessage(message) {
         case 'players_list':
             handlePlayersList(payload);
             break;
+        case 'player_moved':
+            handlePlayerMoved(payload);
+            break;
         case 'error':
             handleError(payload);
             break;
@@ -168,24 +205,51 @@ function handleServerMessage(message) {
 }
 
 function handlePlayerJoined(payload) {
-    const { player_id, name } = payload;
-    console.log(`Player joined: ${name} (${player_id})`);
+    const { player_id, name, position, color } = payload;
+    console.log(`Player joined: ${name} (${player_id}) at (${position.x}, ${position.y})`);
     
     // Track our own player ID
     if (name === currentPlayerName) {
         currentPlayerId = player_id;
         console.log('Set our player ID:', currentPlayerId);
+        
+        // Update mobile UI to show our color
+        const playerInfo = document.getElementById('player-info');
+        if (playerInfo) {
+            const colorDot = document.createElement('span');
+            colorDot.style.display = 'inline-block';
+            colorDot.style.width = '20px';
+            colorDot.style.height = '20px';
+            colorDot.style.borderRadius = '50%';
+            colorDot.style.backgroundColor = color;
+            colorDot.style.marginLeft = '10px';
+            colorDot.style.verticalAlign = 'middle';
+            const nameDisplay = document.getElementById('player-name-display');
+            if (nameDisplay && !nameDisplay.querySelector('span')) {
+                nameDisplay.appendChild(colorDot);
+            }
+        }
+    }
+    
+    // Add to canvas
+    if (mapCanvas) {
+        mapCanvas.addPlayer(player_id, name, position, color);
     }
     
     // Add to players list if we're on desktop
     if (!window.location.pathname.includes('mobile')) {
-        addPlayerToList(player_id, name);
+        addPlayerToList(player_id, name, color);
     }
 }
 
 function handlePlayerLeft(payload) {
     const { player_id, name } = payload;
     console.log(`Player left: ${name} (${player_id})`);
+    
+    // Remove from canvas
+    if (mapCanvas) {
+        mapCanvas.removePlayer(player_id);
+    }
     
     // Remove from players list if we're on desktop
     if (!window.location.pathname.includes('mobile')) {
@@ -197,9 +261,27 @@ function handlePlayersList(payload) {
     const { players } = payload;
     console.log('Players list:', players);
     
+    // Clear and re-add all players to canvas
+    if (mapCanvas) {
+        mapCanvas.clearPlayers();
+        players.forEach(player => {
+            mapCanvas.addPlayer(player.player_id, player.name, player.position, player.color);
+        });
+    }
+    
     // Update players list on desktop
     if (!window.location.pathname.includes('mobile')) {
         updatePlayersList(players);
+    }
+}
+
+function handlePlayerMoved(payload) {
+    const { player_id, position } = payload;
+    console.log(`Player ${player_id} moved to (${position.x}, ${position.y})`);
+    
+    // Update canvas
+    if (mapCanvas) {
+        mapCanvas.updatePlayerPosition(player_id, position);
     }
 }
 
@@ -209,7 +291,7 @@ function handleError(payload) {
     alert(`Error: ${message}`);
 }
 
-function addPlayerToList(playerId, name) {
+function addPlayerToList(playerId, name, color) {
     const playersList = document.getElementById('players-list');
     if (!playersList) return;
     
@@ -223,8 +305,9 @@ function addPlayerToList(playerId, name) {
     const card = document.createElement('div');
     card.className = 'player-card';
     card.id = `player-${playerId}`;
+    card.style.borderLeftColor = color;
     card.innerHTML = `
-        <h3>${name}</h3>
+        <h3><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};margin-right:8px;"></span>${name}</h3>
         <p class="status">Connected</p>
     `;
     
@@ -258,7 +341,7 @@ function updatePlayersList(players) {
     
     // Add each player
     players.forEach(player => {
-        addPlayerToList(player.player_id, player.name);
+        addPlayerToList(player.player_id, player.name, player.color);
     });
 }
 
