@@ -189,6 +189,17 @@ impl GameState {
         self.players.get_mut(player_id)?.character.as_mut()
     }
     
+    /// Get display name for a player (character name if available, otherwise player name)
+    pub fn get_display_name(&self, player_id: &Uuid) -> Option<String> {
+        let player = self.players.get(player_id)?;
+        Some(
+            player.character
+                .as_ref()
+                .map(|c| c.name.clone())
+                .unwrap_or_else(|| player.name.clone())
+        )
+    }
+    
     /// Roll duality dice for a player
     pub fn roll_duality(&self, modifier: i32, with_advantage: bool) -> RollResult {
         let roll = DualityRoll::roll();

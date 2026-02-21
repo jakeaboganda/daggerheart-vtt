@@ -215,13 +215,10 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             
                             ClientMessage::RollDuality { modifier, with_advantage } => {
                                 if let Some(pid) = player_id {
-                                    // Get player name
+                                    // Get display name (character name if available, otherwise player name)
                                     let player_name = {
                                         let game = state_clone.game.read().await;
-                                        game.get_players()
-                                            .iter()
-                                            .find(|p| p.id == pid)
-                                            .map(|p| p.name.clone())
+                                        game.get_display_name(&pid)
                                             .unwrap_or_else(|| "Unknown".to_string())
                                     };
                                     
