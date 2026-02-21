@@ -72,8 +72,11 @@ function initMobileView() {
     }
     
     if (joinButton) {
+        console.log('✅ Join button found, adding click handler');
         joinButton.addEventListener('click', () => {
+            console.log('🖱️ Join button clicked!');
             const name = playerNameInput.value.trim();
+            console.log('📝 Player name entered:', name);
             if (name) {
                 // Just connect first, we'll create character after
                 connectToGame(name);
@@ -162,16 +165,19 @@ function autoReconnect(characterId) {
 }
 
 function connectToGame(playerName) {
-    console.log('Connecting to game...');
+    console.log('🔌 connectToGame() called with name:', playerName);
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
     window.ws = ws; // Update global reference
+    
+    console.log('📡 Connecting to WebSocket...');
     ws.connect();
     
     // After connection is established, we'll show character creation
     // (The 'connected' message handler will trigger this)
     window.pendingPlayerName = playerName; // Store for character creation
+    console.log('✅ Stored pendingPlayerName:', window.pendingPlayerName);
 }
 
 function leaveGame() {
@@ -214,9 +220,20 @@ function showPanel(panelId) {
 }
 
 function showCharacterCreation() {
+    console.log('🎨 showCharacterCreation() called');
+    console.log('📦 characterCreator:', characterCreator);
+    
     showPanel('char-creation-panel');
+    
     const container = document.getElementById('char-creation-container');
-    characterCreator.init(container);
+    console.log('📦 char-creation-container:', container);
+    
+    if (container && characterCreator) {
+        characterCreator.init(container);
+        console.log('✅ Character creator initialized');
+    } else {
+        console.error('❌ Failed to initialize character creator - container:', container, 'creator:', characterCreator);
+    }
 }
 
 function showCharacterSelection(characters) {
@@ -357,6 +374,11 @@ function handleServerMessage(message) {
 function handleConnected(payload) {
     const { connection_id } = payload;
     console.log('✅ Connected with ID:', connection_id);
+    console.log('📍 Current pathname:', window.location.pathname);
+    console.log('📝 pendingPlayerName:', window.pendingPlayerName);
+    console.log('🎯 Is mobile?', window.location.pathname.includes('mobile'));
+    console.log('🎯 Has pendingPlayerName?', !!window.pendingPlayerName);
+    
     currentConnectionId = connection_id;
     
     // If we're on mobile and just joined, show character creation
@@ -364,13 +386,20 @@ function handleConnected(payload) {
         const playerName = window.pendingPlayerName;
         delete window.pendingPlayerName;
         
+        console.log('🎨 Showing character creation for:', playerName);
+        
         // Show character creation immediately (no separate join panel needed)
         showCharacterCreation();
         
         // Pre-fill the name if the creator supports it
         if (characterCreator && characterCreator.setName) {
             characterCreator.setName(playerName);
+            console.log('✏️ Pre-filled character name:', playerName);
+        } else {
+            console.warn('⚠️ characterCreator not available or missing setName()');
         }
+    } else {
+        console.log('⚠️ Not showing character creation - mobile:', window.location.pathname.includes('mobile'), 'pendingPlayerName:', !!window.pendingPlayerName);
     }
 }
 
