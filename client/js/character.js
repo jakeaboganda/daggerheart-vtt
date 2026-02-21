@@ -262,13 +262,19 @@ class CharacterCreator {
     
     createCharacter() {
         // Send to server
+        console.log('Creating character:', this.data);
+        
         if (window.ws) {
+            console.log('Sending create_character message...');
             window.ws.send('create_character', {
                 name: this.data.name,
                 class: this.data.class,
                 ancestry: this.data.ancestry,
                 attributes: this.data.attributes,
             });
+        } else {
+            console.error('WebSocket not connected!');
+            alert('Error: Not connected to server. Please refresh and try again.');
         }
     }
 }

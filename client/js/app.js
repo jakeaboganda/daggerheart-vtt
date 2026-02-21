@@ -40,6 +40,7 @@ function initDesktopView() {
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
+    window.ws = ws; // Update global reference
     ws.connect();
 }
 
@@ -145,6 +146,7 @@ function autoRejoin(playerName) {
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
+    window.ws = ws; // Update global reference
     ws.connect();
     
     // Send join message
@@ -164,6 +166,7 @@ function joinGame(playerName) {
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
+    window.ws = ws; // Update global reference
     ws.connect();
     
     // Wait a bit for connection, then send join message
@@ -565,6 +568,5 @@ async function loadQRCode() {
     }
 }
 
-// Make ws and characterCreator globally accessible for character.js
-window.ws = ws;
-window.characterCreator = characterCreator;
+// Note: window.ws is updated dynamically when WebSocket connections are created
+// (see initDesktopView, autoRejoin, joinGame functions)
