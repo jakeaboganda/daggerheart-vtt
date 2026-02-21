@@ -8,6 +8,8 @@ use futures_util::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
+use daggerheart_engine::character::{Ancestry, Attributes, Class};
+
 use crate::game::SharedGameState;
 use crate::protocol::{ClientMessage, PlayerInfo, ServerMessage};
 
@@ -90,6 +92,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                             connected: p.connected,
                                             position: p.position,
                                             color: p.color,
+                                            has_character: p.character.is_some(),
                                         })
                                         .collect()
                                 };
@@ -114,6 +117,161 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                         let msg = ServerMessage::PlayerMoved {
                                             player_id: pid.to_string(),
                                             position,
+                                        };
+                                        let _ = state_clone.broadcaster.send(msg.to_json());
+                                    }
+                                }
+                            }
+                            
+                            ClientMessage::CreateCharacter { name, class, ancestry, attributes } => {
+                                if let Some(pid) = player_id {
+                                    // Parse class and ancestry
+                                    let class_enum = match class.as_str() {
+                                        "Bard" => Class::Bard,
+                                        "Druid" => Class::Druid,
+                                        "Guardian" => Class::Guardian,
+                                        "Ranger" => Class::Ranger,
+                                        "Rogue" => Class::Rogue,
+                                        "Seraph" => Class::Seraph,
+                                        "Sorcerer" => Class::Sorcerer,
+                                        "Warrior" => Class::Warrior,
+                                        "Wizard" => Class::Wizard,
+                                        _ => {
+                                            tracing::warn!("Unknown class: {}", class);
+                                            continue;
+                                        }
+                                    };
+                                    
+                                    let ancestry_enum = match ancestry.as_str() {
+                                        "Clank" => Ancestry::Clank,
+                                        "Daemon" => Ancestry::Daemon,
+                                        "Drakona" => Ancestry::Drakona,
+                                        "Dwarf" => Ancestry::Dwarf,
+                                        "Faerie" => Ancestry::Faerie,
+                                        "Faun" => Ancestry::Faun,
+                                        "Fungril" => Ancestry::Fungril,
+                                        "Galapa" => Ancestry::Galapa,
+                                        "Giant" => Ancestry::Giant,
+                                        "Goblin" => Ancestry::Goblin,
+                                        "Halfling" => Ancestry::Halfling,
+                                        "Human" => Ancestry::Human,
+                                        "Inferis" => Ancestry::Inferis,
+                                        "Katari" => Ancestry::Katari,
+                                        "Orc" => Ancestry::Orc,
+                                        "Ribbet" => Ancestry::Ribbet,
+                                        "Simiah" => Ancestry::Simiah,
+                                        _ => {
+                                            tracing::warn!("Unknown ancestry: {}", ancestry);
+                                            continue;
+                                        }
+                                    };
+                                    
+                                    // Validate and create attributes
+                                    let attrs = match Attributes::from_array(attributes) {
+                                        Ok(a) => a,
+                                        Err(_) => {
+                                            let error_msg = ServerMessage::Error {
+                                                message: "Invalid attribute distribution. Must be exactly [+2, +1, +1, 0, 0, -1] in any order.".to_string(),
+                                            };
+                                            let _ = state_clone.broadcaster.send(error_msg.to_json());
+                                            continue;
+                                        }
+                                    };
+                                    
+                                    // Create character
+                                    let character = {
+                                        let mut game = state_clone.game.write().await;
+                                        match game.create_character(&pid, name.clone(), class_enum, ancestry_enum, attrs) {
+                                            Ok(c) => c,
+                                            Err(e) => {
+                                                let error_msg = ServerMessage::Error {
+                                                    message: format!("Failed to create character: {}", e),
+                                                };
+                                                let _ = state_clone.broadcaster.send(error_msg.to_json());
+                                                continue;
+                                            }
+                                        }
+                                    };
+                                    
+                                    tracing::info!("Character created for player {}: {} ({} {})",
+                                        pid, character.name, character.ancestry, character.class);
+                                    
+                                    // Broadcast character created
+                                    let msg = ServerMessage::CharacterCreated {
+                                        player_id: pid.to_string(),
+                                        character: character.to_data(),
+                                    };
+                                    let _ = state_clone.broadcaster.send(msg.to_json());
+                                }
+                            }
+                            
+                            ClientMessage::RollDuality { modifier, with_advantage } => {
+                                if let Some(pid) = player_id {
+                                    // Get player name
+                                    let player_name = {
+                                        let game = state_clone.game.read().await;
+                                        game.get_players()
+                                            .iter()
+                                            .find(|p| p.id == pid)
+                                            .map(|p| p.name.clone())
+                                            .unwrap_or_else(|| "Unknown".to_string())
+                                    };
+                                    
+                                    // Roll dice
+                                    let roll = {
+                                        let game = state_clone.game.read().await;
+                                        game.roll_duality(modifier, with_advantage)
+                                    };
+                                    
+                                    tracing::info!("Player {} ({}) rolled: {} + {} (Hope) vs {} (Fear) = {}, controlling: {}",
+                                        player_name, pid, modifier, roll.hope, roll.fear, roll.total, roll.controlling_die);
+                                    
+                                    // Broadcast roll result
+                                    let msg = ServerMessage::RollResult {
+                                        player_id: pid.to_string(),
+                                        player_name,
+                                        roll,
+                                    };
+                                    let _ = state_clone.broadcaster.send(msg.to_json());
+                                }
+                            }
+                            
+                            ClientMessage::UpdateResource { resource, amount } => {
+                                if let Some(pid) = player_id {
+                                    let mut game = state_clone.game.write().await;
+                                    if let Some(character) = game.get_character_mut(&pid) {
+                                        match resource.as_str() {
+                                            "hp" => {
+                                                if amount > 0 {
+                                                    character.hp.heal(amount as u8);
+                                                } else {
+                                                    character.hp.take_damage((-amount) as u8);
+                                                }
+                                            }
+                                            "stress" => {
+                                                if amount > 0 {
+                                                    character.stress.gain(amount as u8);
+                                                } else if amount < 0 {
+                                                    // Clear stress
+                                                    character.stress.clear();
+                                                }
+                                            }
+                                            "hope" => {
+                                                if amount > 0 {
+                                                    let _ = character.hope.gain(amount as u8);
+                                                } else if amount < 0 {
+                                                    let _ = character.hope.spend((-amount) as u8);
+                                                }
+                                            }
+                                            _ => {
+                                                tracing::warn!("Unknown resource: {}", resource);
+                                            }
+                                        }
+                                        
+                                        // Broadcast character updated
+                                        let msg = ServerMessage::CharacterUpdated {
+                                            player_id: pid.to_string(),
+                                            character: character.to_data(),
                                         };
                                         let _ = state_clone.broadcaster.send(msg.to_json());
                                     }
