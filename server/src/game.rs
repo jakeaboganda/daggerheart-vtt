@@ -1,6 +1,6 @@
 //! Game state management
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -9,7 +9,7 @@ use uuid::Uuid;
 use daggerheart_engine::{
     character::{Ancestry, Attributes, Class},
     combat::{HitPoints, Hope, Stress},
-    core::dice::duality::{DualityRoll},
+    core::dice::duality::DualityRoll,
 };
 
 use crate::protocol::{AttributesData, CharacterData, Position, ResourceData, RollResult};
@@ -45,22 +45,17 @@ pub struct Character {
 
 impl Character {
     /// Create new character
-    pub fn new(
-        name: String,
-        class: Class,
-        ancestry: Ancestry,
-        attributes: Attributes,
-    ) -> Self {
+    pub fn new(name: String, class: Class, ancestry: Ancestry, attributes: Attributes) -> Self {
         // Calculate HP
         let base_hp = class.starting_hp() as i32;
         let hp_modifier = ancestry.hp_modifier();
         let max_hp = (base_hp + hp_modifier as i32).max(1) as u8;
-        
+
         // Calculate Evasion
         let base_evasion = class.starting_evasion() as i32;
         let evasion_modifier = ancestry.evasion_modifier();
         let evasion = base_evasion + evasion_modifier as i32;
-        
+
         Self {
             name,
             class,
@@ -72,7 +67,7 @@ impl Character {
             evasion,
         }
     }
-    
+
     /// Convert to protocol CharacterData
     pub fn to_data(&self) -> CharacterData {
         CharacterData {
@@ -132,7 +127,7 @@ impl GameState {
     pub fn add_player(&mut self, name: String) -> Player {
         let color = self.assign_color();
         let position = Position::random(MAP_WIDTH, MAP_HEIGHT);
-        
+
         let player = Player {
             id: Uuid::new_v4(),
             name,
@@ -141,7 +136,7 @@ impl GameState {
             color,
             character: None,
         };
-        
+
         self.players.insert(player.id, player.clone());
         player
     }
@@ -150,7 +145,7 @@ impl GameState {
     pub fn remove_player(&mut self, player_id: &Uuid) -> Option<Player> {
         self.players.remove(player_id)
     }
-    
+
     /// Update player position
     pub fn update_position(&mut self, player_id: &Uuid, position: Position) -> bool {
         if let Some(player) = self.players.get_mut(player_id) {
@@ -160,7 +155,7 @@ impl GameState {
             false
         }
     }
-    
+
     /// Create character for a player
     pub fn create_character(
         &mut self,
@@ -178,41 +173,43 @@ impl GameState {
             Err("Player not found".to_string())
         }
     }
-    
+
     /// Get character for a player
+    #[allow(dead_code)]
     pub fn get_character(&self, player_id: &Uuid) -> Option<&Character> {
         self.players.get(player_id)?.character.as_ref()
     }
-    
+
     /// Get mutable character for a player
     pub fn get_character_mut(&mut self, player_id: &Uuid) -> Option<&mut Character> {
         self.players.get_mut(player_id)?.character.as_mut()
     }
-    
+
     /// Get display name for a player (character name if available, otherwise player name)
     pub fn get_display_name(&self, player_id: &Uuid) -> Option<String> {
         let player = self.players.get(player_id)?;
         Some(
-            player.character
+            player
+                .character
                 .as_ref()
                 .map(|c| c.name.clone())
-                .unwrap_or_else(|| player.name.clone())
+                .unwrap_or_else(|| player.name.clone()),
         )
     }
-    
+
     /// Roll duality dice for a player
     pub fn roll_duality(&self, modifier: i32, with_advantage: bool) -> RollResult {
         let roll = DualityRoll::roll();
-        
+
         let result = if with_advantage {
             roll.with_advantage()
         } else {
             roll.with_modifier(modifier as i8)
         };
-        
+
         // Standard difficulty is 12 in Daggerheart
         const STANDARD_DIFFICULTY: u16 = 12;
-        
+
         RollResult {
             hope: result.roll.hope as i32,
             fear: result.roll.fear as i32,
@@ -234,10 +231,11 @@ impl GameState {
     }
 
     /// Get player count
+    #[allow(dead_code)]
     pub fn player_count(&self) -> usize {
         self.players.len()
     }
-    
+
     /// Assign a color from the palette (cycles through)
     fn assign_color(&mut self) -> String {
         let color = PLAYER_COLORS[self.color_index % PLAYER_COLORS.len()].to_string();
@@ -258,7 +256,7 @@ mod tests {
     fn test_add_player() {
         let mut state = GameState::new();
         let player = state.add_player("Alice".to_string());
-        
+
         assert_eq!(player.name, "Alice");
         assert_eq!(state.player_count(), 1);
         assert!(!player.color.is_empty());
@@ -269,7 +267,7 @@ mod tests {
     fn test_remove_player() {
         let mut state = GameState::new();
         let player = state.add_player("Bob".to_string());
-        
+
         let removed = state.remove_player(&player.id);
         assert!(removed.is_some());
         assert_eq!(state.player_count(), 0);
@@ -280,42 +278,42 @@ mod tests {
         let mut state = GameState::new();
         state.add_player("Alice".to_string());
         state.add_player("Bob".to_string());
-        
+
         let players = state.get_players();
         assert_eq!(players.len(), 2);
     }
-    
+
     #[test]
     fn test_update_position() {
         let mut state = GameState::new();
         let player = state.add_player("Alice".to_string());
-        
+
         let new_pos = Position::new(100.0, 200.0);
         let updated = state.update_position(&player.id, new_pos);
-        
+
         assert!(updated);
         let players = state.get_players();
         assert_eq!(players[0].position.x, 100.0);
         assert_eq!(players[0].position.y, 200.0);
     }
-    
+
     #[test]
     fn test_color_assignment() {
         let mut state = GameState::new();
         let p1 = state.add_player("P1".to_string());
         let p2 = state.add_player("P2".to_string());
         let p3 = state.add_player("P3".to_string());
-        
+
         // Should assign different colors
         assert_ne!(p1.color, p2.color);
         assert_ne!(p2.color, p3.color);
     }
-    
+
     #[test]
     fn test_create_character() {
         let mut state = GameState::new();
         let player = state.add_player("Alice".to_string());
-        
+
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
         let result = state.create_character(
             &player.id,
@@ -324,22 +322,101 @@ mod tests {
             Ancestry::Human,
             attrs,
         );
-        
+
         assert!(result.is_ok());
         let character = state.get_character(&player.id).unwrap();
         assert_eq!(character.name, "Theron");
         assert_eq!(character.class, Class::Warrior);
     }
-    
+
     #[test]
     fn test_roll_duality() {
         let state = GameState::new();
         let result = state.roll_duality(2, false);
-        
+
         // Should have valid values
         assert!(result.hope >= 1 && result.hope <= 12);
         assert!(result.fear >= 1 && result.fear <= 12);
         assert_eq!(result.modifier, 2);
         assert!(result.controlling_die == "Hope" || result.controlling_die == "Fear");
+    }
+
+    #[test]
+    fn test_get_display_name() {
+        let mut state = GameState::new();
+        let player = state.add_player("Alice".to_string());
+
+        // Before character creation - should return player name
+        assert_eq!(state.get_display_name(&player.id).unwrap(), "Alice");
+
+        // After character creation - should return character name
+        let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
+        state
+            .create_character(
+                &player.id,
+                "Theron".to_string(),
+                Class::Warrior,
+                Ancestry::Human,
+                attrs,
+            )
+            .unwrap();
+
+        assert_eq!(state.get_display_name(&player.id).unwrap(), "Theron");
+    }
+
+    #[test]
+    fn test_update_position_invalid_player() {
+        let mut state = GameState::new();
+        let invalid_id = Uuid::new_v4();
+        let pos = Position::new(100.0, 200.0);
+
+        let updated = state.update_position(&invalid_id, pos);
+        assert!(!updated);
+    }
+
+    #[test]
+    fn test_remove_nonexistent_player() {
+        let mut state = GameState::new();
+        let invalid_id = Uuid::new_v4();
+
+        let removed = state.remove_player(&invalid_id);
+        assert!(removed.is_none());
+    }
+
+    #[test]
+    fn test_create_character_invalid_player() {
+        let mut state = GameState::new();
+        let invalid_id = Uuid::new_v4();
+        let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
+
+        let result = state.create_character(
+            &invalid_id,
+            "Theron".to_string(),
+            Class::Warrior,
+            Ancestry::Human,
+            attrs,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Player not found");
+    }
+
+    #[test]
+    fn test_color_cycling() {
+        let mut state = GameState::new();
+        let mut colors = Vec::new();
+
+        // Create 10 players (more than 8 color palette)
+        for i in 0..10 {
+            let player = state.add_player(format!("Player{}", i));
+            colors.push(player.color.clone());
+        }
+
+        // First 8 should be unique
+        let first_eight: std::collections::HashSet<_> = colors.iter().take(8).collect();
+        assert_eq!(first_eight.len(), 8);
+
+        // 9th should match 1st (cycling)
+        assert_eq!(colors[0], colors[8]);
     }
 }

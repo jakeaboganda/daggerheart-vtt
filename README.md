@@ -318,3 +318,45 @@ MIT OR Apache-2.0 (same as daggerheart-engine)
 ---
 
 **Built with ❤️ for couch co-op storytelling** 🎲🗡️❤️
+
+---
+
+## 🧪 Testing & CI/CD
+
+### **Running Tests Locally**
+
+```bash
+# Run full lint and test suite
+./lint-test.sh
+
+# Or manually:
+cd server
+cargo fmt -- --check    # Format check
+cargo clippy            # Linting
+cargo test              # Run tests
+```
+
+### **Test Coverage**
+
+- **21 unit tests** covering protocol, game logic, and integration
+- Tests for message serialization/deserialization
+- Edge case handling (invalid players, position updates, etc.)
+- Character creation and dice rolling mechanics
+
+Install `cargo-tarpaulin` for coverage reports:
+```bash
+cargo install cargo-tarpaulin
+./lint-test.sh  # Generates coverage/index.html
+```
+
+### **CI/CD**
+
+GitHub Actions workflow runs on every push/PR:
+- ✅ Code formatting (`cargo fmt`)
+- ✅ Linting (`cargo clippy` with zero warnings)
+- ✅ All tests pass
+- ✅ Coverage report uploaded as artifact
+
+See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for details.
+
+---

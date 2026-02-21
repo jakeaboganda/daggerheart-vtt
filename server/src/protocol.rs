@@ -13,7 +13,7 @@ impl Position {
     pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
-    
+
     /// Random position within map bounds
     pub fn random(width: f32, height: f32) -> Self {
         use rand::Rng;
@@ -72,10 +72,10 @@ pub struct RollResult {
 pub enum ClientMessage {
     #[serde(rename = "player_join")]
     PlayerJoin { name: String },
-    
+
     #[serde(rename = "player_move")]
     PlayerMove { x: f32, y: f32 },
-    
+
     #[serde(rename = "create_character")]
     CreateCharacter {
         name: String,
@@ -83,13 +83,10 @@ pub enum ClientMessage {
         ancestry: String,
         attributes: [i8; 6], // [agility, strength, finesse, instinct, presence, knowledge]
     },
-    
+
     #[serde(rename = "roll_duality")]
-    RollDuality {
-        modifier: i32,
-        with_advantage: bool,
-    },
-    
+    RollDuality { modifier: i32, with_advantage: bool },
+
     #[serde(rename = "update_resource")]
     UpdateResource {
         resource: String, // "hp", "stress", or "hope"
@@ -108,53 +105,46 @@ pub enum ServerMessage {
         position: Position,
         color: String,
     },
-    
+
     #[serde(rename = "player_left")]
-    PlayerLeft {
-        player_id: String,
-        name: String,
-    },
-    
+    PlayerLeft { player_id: String, name: String },
+
     #[serde(rename = "players_list")]
-    PlayersList {
-        players: Vec<PlayerInfo>,
-    },
-    
+    PlayersList { players: Vec<PlayerInfo> },
+
     #[serde(rename = "player_moved")]
     PlayerMoved {
         player_id: String,
         position: Position,
     },
-    
+
     #[serde(rename = "character_created")]
     CharacterCreated {
         player_id: String,
         character: CharacterData,
     },
-    
+
     #[serde(rename = "character_updated")]
     CharacterUpdated {
         player_id: String,
         character: CharacterData,
     },
-    
+
     #[serde(rename = "player_name_updated")]
     PlayerNameUpdated {
         player_id: String,
         display_name: String, // Character name for display
     },
-    
+
     #[serde(rename = "roll_result")]
     RollResult {
         player_id: String,
         player_name: String,
         roll: RollResult,
     },
-    
+
     #[serde(rename = "error")]
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,53 +172,61 @@ mod tests {
     fn test_client_message_deserialize() {
         let json = r#"{"type":"player_join","payload":{"name":"Alice"}}"#;
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
-        
+
         match msg {
             ClientMessage::PlayerJoin { name } => assert_eq!(name, "Alice"),
             _ => panic!("Wrong message type"),
         }
     }
-    
+
     #[test]
     fn test_player_move_deserialize() {
         let json = r#"{"type":"player_move","payload":{"x":100.0,"y":200.0}}"#;
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
-        
+
         match msg {
             ClientMessage::PlayerMove { x, y } => {
                 assert_eq!(x, 100.0);
                 assert_eq!(y, 200.0);
-            },
+            }
             _ => panic!("Wrong message type"),
         }
     }
-    
+
     #[test]
     fn test_create_character_deserialize() {
         let json = r#"{"type":"create_character","payload":{"name":"Theron","class":"Warrior","ancestry":"Human","attributes":[2,1,1,0,0,-1]}}"#;
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
-        
+
         match msg {
-            ClientMessage::CreateCharacter { name, class, ancestry, attributes } => {
+            ClientMessage::CreateCharacter {
+                name,
+                class,
+                ancestry,
+                attributes,
+            } => {
                 assert_eq!(name, "Theron");
                 assert_eq!(class, "Warrior");
                 assert_eq!(ancestry, "Human");
                 assert_eq!(attributes, [2, 1, 1, 0, 0, -1]);
-            },
+            }
             _ => panic!("Wrong message type"),
         }
     }
-    
+
     #[test]
     fn test_roll_duality_deserialize() {
         let json = r#"{"type":"roll_duality","payload":{"modifier":2,"with_advantage":true}}"#;
         let msg: ClientMessage = serde_json::from_str(json).unwrap();
-        
+
         match msg {
-            ClientMessage::RollDuality { modifier, with_advantage } => {
+            ClientMessage::RollDuality {
+                modifier,
+                with_advantage,
+            } => {
                 assert_eq!(modifier, 2);
                 assert!(with_advantage);
-            },
+            }
             _ => panic!("Wrong message type"),
         }
     }
@@ -241,12 +239,12 @@ mod tests {
             position: Position::new(100.0, 200.0),
             color: "#3b82f6".to_string(),
         };
-        
+
         let json = msg.to_json();
         assert!(json.contains("player_joined"));
         assert!(json.contains("Bob"));
     }
-    
+
     #[test]
     fn test_character_data_serialize() {
         let char_data = CharacterData {
@@ -261,14 +259,84 @@ mod tests {
                 presence: 0,
                 knowledge: -1,
             },
-            hp: ResourceData { current: 6, maximum: 6 },
+            hp: ResourceData {
+                current: 6,
+                maximum: 6,
+            },
             stress: 0,
-            hope: ResourceData { current: 5, maximum: 5 },
+            hope: ResourceData {
+                current: 5,
+                maximum: 5,
+            },
             evasion: 12,
         };
-        
+
         let json = serde_json::to_string(&char_data).unwrap();
         assert!(json.contains("Theron"));
         assert!(json.contains("Warrior"));
+    }
+
+    #[test]
+    fn test_position_random() {
+        let pos = Position::random(800.0, 600.0);
+        assert!(pos.x >= 50.0 && pos.x <= 750.0);
+        assert!(pos.y >= 50.0 && pos.y <= 550.0);
+    }
+
+    #[test]
+    fn test_all_client_messages() {
+        // Test player_join
+        let json = r#"{"type":"player_join","payload":{"name":"Alice"}}"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ClientMessage::PlayerJoin { .. }));
+
+        // Test player_move
+        let json = r#"{"type":"player_move","payload":{"x":100.0,"y":200.0}}"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ClientMessage::PlayerMove { .. }));
+
+        // Test create_character
+        let json = r#"{"type":"create_character","payload":{"name":"Theron","class":"Warrior","ancestry":"Human","attributes":[2,1,1,0,0,-1]}}"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ClientMessage::CreateCharacter { .. }));
+
+        // Test roll_duality
+        let json = r#"{"type":"roll_duality","payload":{"modifier":2,"with_advantage":false}}"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ClientMessage::RollDuality { .. }));
+
+        // Test update_resource
+        let json = r#"{"type":"update_resource","payload":{"resource":"hp","amount":-3}}"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+        assert!(matches!(msg, ClientMessage::UpdateResource { .. }));
+    }
+
+    #[test]
+    fn test_all_server_messages() {
+        // Test PlayerJoined
+        let msg = ServerMessage::PlayerJoined {
+            player_id: "123".to_string(),
+            name: "Alice".to_string(),
+            position: Position::new(100.0, 200.0),
+            color: "#ff0000".to_string(),
+        };
+        let json = msg.to_json();
+        assert!(json.contains("player_joined"));
+
+        // Test PlayerLeft
+        let msg = ServerMessage::PlayerLeft {
+            player_id: "123".to_string(),
+            name: "Alice".to_string(),
+        };
+        let json = msg.to_json();
+        assert!(json.contains("player_left"));
+
+        // Test Error
+        let msg = ServerMessage::Error {
+            message: "Test error".to_string(),
+        };
+        let json = msg.to_json();
+        assert!(json.contains("error"));
+        assert!(json.contains("Test error"));
     }
 }

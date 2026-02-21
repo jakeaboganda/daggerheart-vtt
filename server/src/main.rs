@@ -14,22 +14,18 @@ use std::net::UdpSocket;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tower_http::services::ServeDir;
-use tracing_subscriber;
 
 use crate::game::GameState;
 use crate::websocket::AppState;
 
 /// Get the local network IP address
 fn get_local_ip() -> String {
-    match UdpSocket::bind("0.0.0.0:0") {
-        Ok(socket) => {
-            if socket.connect("8.8.8.8:80").is_ok() {
-                if let Ok(addr) = socket.local_addr() {
-                    return addr.ip().to_string();
-                }
+    if let Ok(socket) = UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                return addr.ip().to_string();
             }
         }
-        Err(_) => {}
     }
     "localhost".to_string()
 }
@@ -47,10 +43,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Create game state
     let game_state = Arc::new(RwLock::new(GameState::new()));
-    
+
     // Create broadcast channel for WebSocket messages
     let (broadcaster, _) = broadcast::channel::<String>(100);
-    
+
     let app_state = AppState {
         game: game_state,
         broadcaster,
@@ -70,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
     // Determine server address
     let addr = "0.0.0.0:3000";
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    
+
     tracing::info!("✅ Server listening on http://{}", addr);
     tracing::info!("");
     tracing::info!("📡 Network Access:");
