@@ -1,0 +1,194 @@
+/* Daggerheart VTT Styles */
+
+:root {
+    --hope-color: #FFD700;
+    --fear-color: #8B008B;
+    --bg-dark: #1a1a1a;
+    --bg-medium: #2a2a2a;
+    --text-light: #f0f0f0;
+    --text-dim: #999;
+    --accent: #4a9eff;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    line-height: 1.6;
+}
+
+#app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: linear-gradient(135deg, var(--hope-color) 0%, var(--fear-color) 100%);
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+header h1 {
+    font-size: 2.5rem;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+    margin: 0;
+}
+
+.phase-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    padding: 0.25rem 1rem;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+main {
+    flex: 1;
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+section {
+    background: var(--bg-medium);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+
+h2 {
+    color: var(--hope-color);
+    margin-bottom: 1.5rem;
+    font-size: 1.8rem;
+}
+
+.connection-panel {
+    text-align: center;
+}
+
+#qr-code-container {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    display: inline-block;
+    margin: 1rem 0;
+}
+
+.connection-url {
+    font-size: 1.2rem;
+    font-family: 'Courier New', monospace;
+    color: var(--accent);
+    margin-top: 1rem;
+}
+
+.players-panel {
+}
+
+#players-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.player-card {
+    background: var(--bg-dark);
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid var(--accent);
+}
+
+.player-card h3 {
+    color: var(--text-light);
+    margin-bottom: 0.5rem;
+}
+
+.player-card .status {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+
+.empty-state {
+    color: var(--text-dim);
+    font-style: italic;
+    text-align: center;
+    padding: 2rem;
+}
+
+footer {
+    background: var(--bg-medium);
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+
+footer a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+footer a:hover {
+    text-decoration: underline;
+}
+
+/* Mobile-specific styles */
+body.mobile {
+    font-size: 16px;
+}
+
+body.mobile header h1 {
+    font-size: 1.8rem;
+}
+
+body.mobile main {
+    padding: 1rem;
+}
+
+.join-panel input {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.1rem;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    background: var(--bg-dark);
+    color: var(--text-light);
+    margin-bottom: 1rem;
+}
+
+.join-panel button {
+    width: 100%;
+    padding: 1rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, var(--hope-color) 0%, var(--fear-color) 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.join-panel button:active {
+    transform: scale(0.98);
+}
+
+.player-info {
+    text-align: center;
+}
+
+.status {
+    color: #4ade80;
+    font-weight: bold;
+}

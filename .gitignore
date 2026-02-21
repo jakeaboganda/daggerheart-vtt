@@ -1,0 +1,28 @@
+# Rust
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Game saves (optional - might want to track sample saves)
+saves/*.json
+!saves/.gitkeep
+
+# Node modules (if we add build tools later)
+node_modules/

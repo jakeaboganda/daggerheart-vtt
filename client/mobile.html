@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Daggerheart VTT - Mobile</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="mobile">
+    <div id="app">
+        <header>
+            <h1>🗡️❤️ Daggerheart</h1>
+        </header>
+
+        <main>
+            <section class="join-panel">
+                <h2>Join Game</h2>
+                <input type="text" id="player-name" placeholder="Enter your name" />
+                <button id="join-button">Join</button>
+            </section>
+
+            <section class="player-info" id="player-info" style="display: none;">
+                <h2>Welcome, <span id="player-name-display"></span>!</h2>
+                <p class="status">Connected to game</p>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
