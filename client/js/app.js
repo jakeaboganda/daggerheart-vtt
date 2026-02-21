@@ -226,13 +226,14 @@ function showCharacterSheet(character) {
     
     // Initialize/reinitialize mini canvas for character sheet
     // (Always create fresh to ensure correct canvas element)
-    console.log('Initializing character sheet canvas...');
+    console.log('📊 Initializing character sheet canvas...');
     mapCanvas = new MapCanvas('mini-canvas');
     
     // Repopulate canvas with all players
-    console.log('Repopulating canvas with', allPlayers.length, 'players');
+    console.log(`🎮 Repopulating canvas with ${allPlayers.length} players:`);
     allPlayers.forEach(player => {
         const displayName = player.character_name || player.name;
+        console.log(`   - ${player.player_id.substring(0, 8)}: "${displayName}" (char: ${player.character_name || 'none'}, join: ${player.name})`);
         mapCanvas.addPlayer(player.player_id, displayName, player.position, player.color);
     });
 }
@@ -434,17 +435,24 @@ function handleCharacterUpdated(payload) {
 
 function handlePlayerNameUpdated(payload) {
     const { player_id, display_name } = payload;
-    console.log(`Player ${player_id} name updated to:`, display_name);
+    console.log(`🎭 Player ${player_id} name updated to: "${display_name}"`);
     
     // Update in stored players list
     const player = allPlayers.find(p => p.player_id === player_id);
     if (player) {
+        console.log(`   Old name: "${player.character_name || player.name}"`);
         player.character_name = display_name;
+        console.log(`   New name: "${display_name}"`);
+    } else {
+        console.warn(`   Player ${player_id} not found in allPlayers!`);
     }
     
     // Update canvas if it exists
     if (mapCanvas) {
+        console.log(`   Updating canvas token name...`);
         mapCanvas.updatePlayerName(player_id, display_name);
+    } else {
+        console.log(`   Canvas not initialized yet`);
     }
 }
 

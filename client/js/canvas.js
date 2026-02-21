@@ -46,8 +46,10 @@ class MapCanvas {
     updatePlayerName(playerId, newName) {
         const player = this.players.get(playerId);
         if (player) {
+            console.log(`MapCanvas: Updating player ${playerId} name: "${player.name}" → "${newName}"`);
             player.name = newName;
-            console.log('Updated player name:', playerId, '->', newName);
+        } else {
+            console.warn(`MapCanvas: Player ${playerId} not found in canvas!`);
         }
     }
     
