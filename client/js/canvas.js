@@ -1,5 +1,5 @@
 // Canvas Rendering Module
-// Phase 2: Map & Movement
+// Phase 5A: Character-Centric Architecture
 
 const MAP_WIDTH = 800;
 const MAP_HEIGHT = 600;
@@ -14,8 +14,8 @@ class MapCanvas {
         }
         
         this.ctx = this.canvas.getContext('2d');
-        this.players = new Map(); // player_id -> player data
-        this.animating = new Map(); // player_id -> animation state
+        this.players = new Map(); // character_id -> character data (keeping "players" var name for compatibility)
+        this.animating = new Map(); // character_id -> animation state
         
         // Set canvas size
         this.canvas.width = MAP_WIDTH;

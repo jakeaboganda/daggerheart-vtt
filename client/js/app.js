@@ -1,19 +1,19 @@
 // Daggerheart VTT Client
-// Phase 3: Daggerheart Integration
+// Phase 5A: Character-Centric Architecture
 
-console.log('🎲 Daggerheart VTT Client - Phase 3');
+console.log('🎲 Daggerheart VTT Client - Phase 5A');
 
 let ws = null;
-let currentPlayerId = null;
-let currentPlayerName = null;
+let currentConnectionId = null;
+let currentCharacterId = null;
 let currentCharacter = null;
 let mapCanvas = null;
 let characterCreator = null;
-let allPlayers = []; // Store all players for canvas repopulation
+let allCharacters = []; // Store all characters for canvas repopulation
 
 // LocalStorage keys
 const STORAGE_KEYS = {
-    PLAYER_NAME: 'dh_vtt_player_name',
+    CHARACTER_ID: 'dh_vtt_character_id',
     SESSION_ACTIVE: 'dh_vtt_session_active'
 };
 
@@ -58,17 +58,16 @@ function initMobileView() {
     // Initialize character creator
     characterCreator = new CharacterCreator();
     
-    // Check if we have a saved session
-    const savedName = localStorage.getItem(STORAGE_KEYS.PLAYER_NAME);
+    // Check if we have a saved character
+    const savedCharId = localStorage.getItem(STORAGE_KEYS.CHARACTER_ID);
     const sessionActive = localStorage.getItem(STORAGE_KEYS.SESSION_ACTIVE) === 'true';
     
-    if (savedName && sessionActive) {
-        console.log('Found saved session, auto-rejoining as:', savedName);
-        currentPlayerName = savedName;
+    if (savedCharId && sessionActive) {
+        console.log('Found saved character, auto-reconnecting:', savedCharId);
         
-        // Auto-rejoin
+        // Auto-reconnect
         setTimeout(() => {
-            autoRejoin(savedName);
+            autoReconnect(savedCharId);
         }, 500);
     }
     
@@ -76,7 +75,8 @@ function initMobileView() {
         joinButton.addEventListener('click', () => {
             const name = playerNameInput.value.trim();
             if (name) {
-                joinGame(name);
+                // Just connect first, we'll create character after
+                connectToGame(name);
             } else {
                 alert('Please enter your name');
             }
@@ -114,7 +114,7 @@ function initMobileView() {
         });
     }
     
-    // Mobile tap-to-move (only the character sheet canvas)
+    // Mobile tap-to-move
     setupMobileCanvas('mini-canvas');
 }
 
@@ -123,63 +123,62 @@ function setupMobileCanvas(canvasId) {
     if (!canvas) return;
     
     canvas.addEventListener('click', (e) => {
-        if (currentPlayerId && ws && mapCanvas) {
-            const pos = mapCanvas.getClickPosition(e);
-            console.log('Tap to move:', pos);
-            ws.send('player_move', { x: pos.x, y: pos.y });
+        if (currentCharacterId && ws) {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            console.log('Tap to move:', {x, y});
+            ws.send('move_character', { x, y });
         }
     });
     
     canvas.addEventListener('touchend', (e) => {
         e.preventDefault();
-        if (currentPlayerId && ws && mapCanvas && e.changedTouches.length > 0) {
+        if (currentCharacterId && ws && e.changedTouches.length > 0) {
             const touch = e.changedTouches[0];
-            const pos = mapCanvas.getClickPosition(touch);
-            console.log('Touch to move:', pos);
-            ws.send('player_move', { x: pos.x, y: pos.y });
+            const rect = canvas.getBoundingClientRect();
+            const x = (touch.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (touch.clientY - rect.top) * (canvas.height / rect.height);
+            console.log('Touch to move:', {x, y});
+            ws.send('move_character', { x, y });
         }
     });
 }
 
-function autoRejoin(playerName) {
-    console.log('Auto-rejoining as:', playerName);
+function autoReconnect(characterId) {
+    console.log('Auto-reconnecting and selecting character:', characterId);
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
     window.ws = ws; // Update global reference
     ws.connect();
     
-    // Send join message
+    // After connection, try to select the character
     setTimeout(() => {
-        ws.send('player_join', { name: playerName });
+        if (ws) {
+            ws.send('select_character', { character_id: characterId });
+        }
     }, 500);
 }
 
-function joinGame(playerName) {
-    console.log('Joining game as:', playerName);
-    
-    currentPlayerName = playerName;
-    
-    // Save to localStorage
-    localStorage.setItem(STORAGE_KEYS.PLAYER_NAME, playerName);
-    localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'true');
+function connectToGame(playerName) {
+    console.log('Connecting to game...');
     
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
     window.ws = ws; // Update global reference
     ws.connect();
     
-    // Wait a bit for connection, then send join message
-    setTimeout(() => {
-        ws.send('player_join', { name: playerName });
-    }, 500);
+    // After connection is established, we'll show character creation
+    // (The 'connected' message handler will trigger this)
+    window.pendingPlayerName = playerName; // Store for character creation
 }
 
 function leaveGame() {
     console.log('Leaving game');
     
     // Clear localStorage
-    localStorage.removeItem(STORAGE_KEYS.PLAYER_NAME);
+    localStorage.removeItem(STORAGE_KEYS.CHARACTER_ID);
     localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'false');
     
     // Disconnect WebSocket
@@ -196,14 +195,14 @@ function leaveGame() {
     showPanel('join-panel');
     document.getElementById('player-name').value = '';
     
-    currentPlayerName = null;
-    currentPlayerId = null;
+    currentConnectionId = null;
+    currentCharacterId = null;
     currentCharacter = null;
 }
 
 function showPanel(panelId) {
     // Hide all panels
-    const panels = ['join-panel', 'player-info', 'char-creation-panel', 'char-sheet-panel'];
+    const panels = ['join-panel', 'player-info', 'char-creation-panel', 'char-sheet-panel', 'char-select-panel'];
     panels.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -220,21 +219,53 @@ function showCharacterCreation() {
     characterCreator.init(container);
 }
 
+function showCharacterSelection(characters) {
+    showPanel('char-select-panel');
+    const list = document.getElementById('char-select-list');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    // Filter for player characters that aren't controlled by others
+    const availableChars = characters.filter(c => !c.is_npc && !c.controlled_by_other);
+    
+    if (availableChars.length === 0) {
+        list.innerHTML = '<p>No available characters. Create a new one!</p>';
+        return;
+    }
+    
+    availableChars.forEach(char => {
+        const card = document.createElement('div');
+        card.className = 'character-card';
+        card.innerHTML = `
+            <h3>${char.name}</h3>
+            <p>${char.class} • ${char.ancestry}</p>
+            <button onclick="selectCharacter('${char.id}')">Select</button>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function selectCharacter(characterId) {
+    console.log('Selecting character:', characterId);
+    if (ws) {
+        ws.send('select_character', { character_id: characterId });
+    }
+}
+
 function showCharacterSheet(character) {
     showPanel('char-sheet-panel');
     updateCharacterSheet(character);
     
     // Initialize/reinitialize mini canvas for character sheet
-    // (Always create fresh to ensure correct canvas element)
     console.log('📊 Initializing character sheet canvas...');
     mapCanvas = new MapCanvas('mini-canvas');
     
-    // Repopulate canvas with all players
-    console.log(`🎮 Repopulating canvas with ${allPlayers.length} players:`);
-    allPlayers.forEach(player => {
-        const displayName = player.character_name || player.name;
-        console.log(`   - ${player.player_id.substring(0, 8)}: "${displayName}" (char: ${player.character_name || 'none'}, join: ${player.name})`);
-        mapCanvas.addPlayer(player.player_id, displayName, player.position, player.color);
+    // Repopulate canvas with all characters
+    console.log(`🎮 Repopulating canvas with ${allCharacters.length} characters:`);
+    allCharacters.forEach(char => {
+        console.log(`   - ${char.id.substring(0, 8)}: "${char.name}"`);
+        mapCanvas.addPlayer(char.id, char.name, char.position, char.color);
     });
 }
 
@@ -291,26 +322,26 @@ function handleServerMessage(message) {
     const { type, payload } = message;
     
     switch (type) {
-        case 'player_joined':
-            handlePlayerJoined(payload);
+        case 'connected':
+            handleConnected(payload);
             break;
-        case 'player_left':
-            handlePlayerLeft(payload);
+        case 'characters_list':
+            handleCharactersList(payload);
             break;
-        case 'players_list':
-            handlePlayersList(payload);
+        case 'character_selected':
+            handleCharacterSelected(payload);
             break;
-        case 'player_moved':
-            handlePlayerMoved(payload);
+        case 'character_spawned':
+            handleCharacterSpawned(payload);
+            break;
+        case 'character_moved':
+            handleCharacterMoved(payload);
             break;
         case 'character_created':
             handleCharacterCreated(payload);
             break;
         case 'character_updated':
             handleCharacterUpdated(payload);
-            break;
-        case 'player_name_updated':
-            handlePlayerNameUpdated(payload);
             break;
         case 'roll_result':
             handleRollResult(payload);
@@ -323,161 +354,154 @@ function handleServerMessage(message) {
     }
 }
 
-function handlePlayerJoined(payload) {
-    const { player_id, name, position, color } = payload;
-    console.log(`Player joined: ${name} (${player_id}) at (${position.x}, ${position.y})`);
+function handleConnected(payload) {
+    const { connection_id } = payload;
+    console.log('✅ Connected with ID:', connection_id);
+    currentConnectionId = connection_id;
     
-    // Track our own player ID
-    if (name === currentPlayerName) {
-        currentPlayerId = player_id;
-        console.log('Set our player ID:', currentPlayerId);
+    // If we're on mobile and just joined, show character creation
+    if (window.location.pathname.includes('mobile') && window.pendingPlayerName) {
+        const playerName = window.pendingPlayerName;
+        delete window.pendingPlayerName;
         
-        // Show player info panel (no character yet)
-        showPanel('player-info');
-        document.getElementById('player-name-display').textContent = name;
+        // Show character creation immediately (no separate join panel needed)
+        showCharacterCreation();
         
-        // Add color dot
-        const colorDot = document.createElement('span');
-        colorDot.style.display = 'inline-block';
-        colorDot.style.width = '20px';
-        colorDot.style.height = '20px';
-        colorDot.style.borderRadius = '50%';
-        colorDot.style.backgroundColor = color;
-        colorDot.style.marginLeft = '10px';
-        colorDot.style.verticalAlign = 'middle';
-        const nameDisplay = document.getElementById('player-name-display');
-        if (nameDisplay && !nameDisplay.querySelector('span')) {
-            nameDisplay.appendChild(colorDot);
+        // Pre-fill the name if the creator supports it
+        if (characterCreator && characterCreator.setName) {
+            characterCreator.setName(playerName);
         }
-        
-        // NOTE: Canvas initialization happens AFTER character creation
-        // See showCharacterSheet() function
-    }
-    
-    // Add to canvas
-    if (mapCanvas) {
-        mapCanvas.addPlayer(player_id, name, position, color);
-    }
-    
-    // Add to players list if we're on desktop
-    if (!window.location.pathname.includes('mobile')) {
-        addPlayerToList(player_id, name, color);
     }
 }
 
-function handlePlayerLeft(payload) {
-    const { player_id, name } = payload;
-    console.log(`Player left: ${name} (${player_id})`);
+function handleCharactersList(payload) {
+    const { characters } = payload;
+    console.log('Characters list:', characters);
     
-    // Remove from canvas
-    if (mapCanvas) {
-        mapCanvas.removePlayer(player_id);
-    }
+    // Store characters for later use
+    allCharacters = characters;
     
-    // Remove from players list if we're on desktop
-    if (!window.location.pathname.includes('mobile')) {
-        removePlayerFromList(player_id);
-    }
-}
-
-function handlePlayersList(payload) {
-    const { players } = payload;
-    console.log('Players list:', players);
-    
-    // Store players for later use
-    allPlayers = players;
-    
-    // Clear and re-add all players to canvas
+    // Clear and re-add all characters to canvas
     if (mapCanvas) {
         mapCanvas.clearPlayers();
-        players.forEach(player => {
-            // Use character name if available, otherwise use join name
-            const displayName = player.character_name || player.name;
-            mapCanvas.addPlayer(player.player_id, displayName, player.position, player.color);
+        characters.forEach(char => {
+            mapCanvas.addPlayer(char.id, char.name, char.position, char.color);
         });
     }
     
-    // Update players list on desktop
+    // Update characters list on desktop
     if (!window.location.pathname.includes('mobile')) {
-        updatePlayersList(players);
+        updateCharactersList(characters);
     }
 }
 
-function handlePlayerMoved(payload) {
-    const { player_id, position } = payload;
-    console.log(`Player ${player_id} moved to (${position.x}, ${position.y})`);
+function handleCharacterSelected(payload) {
+    const { character_id, character } = payload;
+    console.log('✅ Character selected:', character);
+    
+    currentCharacterId = character_id;
+    
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.CHARACTER_ID, character_id);
+    localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'true');
+    
+    // Show character sheet
+    showCharacterSheet(character);
+}
+
+function handleCharacterSpawned(payload) {
+    const { character_id, name, position, color, is_npc } = payload;
+    console.log(`Character spawned: ${name} (${character_id}) at (${position.x}, ${position.y})`);
+    
+    // Add to all characters list
+    allCharacters.push({
+        id: character_id,
+        name,
+        position,
+        color,
+        is_npc,
+    });
+    
+    // Add to canvas
+    if (mapCanvas) {
+        mapCanvas.addPlayer(character_id, name, position, color);
+    }
+    
+    // Add to characters list if we're on desktop
+    if (!window.location.pathname.includes('mobile')) {
+        addCharacterToList(character_id, name, color, is_npc);
+    }
+}
+
+function handleCharacterMoved(payload) {
+    const { character_id, position } = payload;
+    console.log(`Character ${character_id} moved to (${position.x}, ${position.y})`);
+    
+    // Update in allCharacters
+    const char = allCharacters.find(c => c.id === character_id);
+    if (char) {
+        char.position = position;
+    }
     
     // Update canvas
     if (mapCanvas) {
-        mapCanvas.updatePlayerPosition(player_id, position);
+        mapCanvas.updatePlayerPosition(character_id, position);
     }
 }
 
 function handleCharacterCreated(payload) {
-    const { player_id, character } = payload;
+    const { character_id, character } = payload;
     console.log('Character created:', character);
     
-    // If it's our character, show character sheet
-    if (player_id === currentPlayerId) {
-        showCharacterSheet(character);
-    }
+    // This character is automatically selected for us
+    currentCharacterId = character_id;
+    
+    // Save to localStorage
+    localStorage.setItem(STORAGE_KEYS.CHARACTER_ID, character_id);
+    localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'true');
+    
+    // Show character sheet
+    showCharacterSheet(character);
 }
 
 function handleCharacterUpdated(payload) {
-    const { player_id, character } = payload;
+    const { character_id, character } = payload;
     console.log('Character updated:', character);
     
     // If it's our character, update sheet
-    if (player_id === currentPlayerId) {
+    if (character_id === currentCharacterId) {
         updateCharacterSheet(character);
     }
 }
 
-function handlePlayerNameUpdated(payload) {
-    const { player_id, display_name } = payload;
-    console.log(`🎭 Player ${player_id} name updated to: "${display_name}"`);
-    
-    // Update in stored players list
-    const player = allPlayers.find(p => p.player_id === player_id);
-    if (player) {
-        console.log(`   Old name: "${player.character_name || player.name}"`);
-        player.character_name = display_name;
-        console.log(`   New name: "${display_name}"`);
-    } else {
-        console.warn(`   Player ${player_id} not found in allPlayers!`);
-    }
-    
-    // Update canvas if it exists
-    if (mapCanvas) {
-        console.log(`   Updating canvas token name...`);
-        mapCanvas.updatePlayerName(player_id, display_name);
-    } else {
-        console.log(`   Canvas not initialized yet`);
-    }
-}
-
 function handleRollResult(payload) {
-    const { player_id, player_name, roll } = payload;
-    console.log(`${player_name} rolled:`, roll);
+    const { character_id, character_name, roll } = payload;
+    console.log(`${character_name} rolled:`, roll);
     
     // Show roll result on TV
     if (!window.location.pathname.includes('mobile')) {
-        showRollResultOnTV(player_name, roll);
+        showRollResultOnTV(character_name, roll);
     }
     
     // If on mobile and it's our roll, could show feedback
-    if (player_id === currentPlayerId) {
+    if (character_id === currentCharacterId) {
         console.log('Your roll result:', roll);
         // Could add mobile-specific feedback here
     }
 }
 
-function showRollResultOnTV(playerName, roll) {
+function handleError(payload) {
+    const { message } = payload;
+    console.error('Server error:', message);
+    alert(`Error: ${message}`);
+}
+
+function showRollResultOnTV(characterName, roll) {
     const overlay = document.getElementById('roll-overlay');
     if (!overlay) return;
     
     // Update content
-    document.getElementById('roll-player').textContent = playerName;
+    document.getElementById('roll-player').textContent = characterName;
     document.getElementById('hope-value').textContent = roll.hope;
     document.getElementById('fear-value').textContent = roll.fear;
     document.getElementById('total-value').textContent = roll.total;
@@ -498,39 +522,32 @@ function showRollResultOnTV(playerName, roll) {
     
     // Update success badge
     const successBadge = document.getElementById('success-badge');
-    successBadge.className = 'success-badge';
     if (roll.is_success) {
-        successBadge.classList.add('success');
         successBadge.textContent = 'SUCCESS';
+        successBadge.className = 'success-badge success';
     } else {
-        successBadge.classList.add('failure');
         successBadge.textContent = 'FAILURE';
+        successBadge.className = 'success-badge failure';
     }
     
-    // Show/hide critical badge
+    // Show critical badge if applicable
     const criticalBadge = document.getElementById('critical-badge');
     if (roll.is_critical) {
-        criticalBadge.style.display = 'block';
+        criticalBadge.style.display = 'inline-block';
     } else {
         criticalBadge.style.display = 'none';
     }
     
     // Show overlay
-    overlay.style.display = 'block';
+    overlay.style.display = 'flex';
     
-    // Hide after 4 seconds
+    // Hide after 5 seconds
     setTimeout(() => {
         overlay.style.display = 'none';
-    }, 4000);
+    }, 5000);
 }
 
-function handleError(payload) {
-    const { message } = payload;
-    console.error('Server error:', message);
-    alert(`Error: ${message}`);
-}
-
-function addPlayerToList(playerId, name, color) {
+function addCharacterToList(characterId, name, color, isNpc) {
     const playersList = document.getElementById('players-list');
     if (!playersList) return;
     
@@ -540,47 +557,34 @@ function addPlayerToList(playerId, name, color) {
         emptyState.remove();
     }
     
-    // Create player card
+    // Create character card
     const card = document.createElement('div');
     card.className = 'player-card';
-    card.id = `player-${playerId}`;
+    card.id = `character-${characterId}`;
     card.style.borderLeftColor = color;
     card.innerHTML = `
         <h3><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};margin-right:8px;"></span>${name}</h3>
-        <p class="status">Connected</p>
+        <p class="status">${isNpc ? 'NPC' : 'Player'}</p>
     `;
     
     playersList.appendChild(card);
 }
 
-function removePlayerFromList(playerId) {
-    const card = document.getElementById(`player-${playerId}`);
-    if (card) {
-        card.remove();
-    }
-    
-    // Show empty state if no players
-    const playersList = document.getElementById('players-list');
-    if (playersList && playersList.children.length === 0) {
-        playersList.innerHTML = '<p class="empty-state">No players connected yet...</p>';
-    }
-}
-
-function updatePlayersList(players) {
+function updateCharactersList(characters) {
     const playersList = document.getElementById('players-list');
     if (!playersList) return;
     
     // Clear list
     playersList.innerHTML = '';
     
-    if (players.length === 0) {
-        playersList.innerHTML = '<p class="empty-state">No players connected yet...</p>';
+    if (characters.length === 0) {
+        playersList.innerHTML = '<p class="empty-state">No characters in game yet...</p>';
         return;
     }
     
-    // Add each player
-    players.forEach(player => {
-        addPlayerToList(player.player_id, player.name, player.color);
+    // Add each character
+    characters.forEach(char => {
+        addCharacterToList(char.id, char.name, char.color, char.is_npc);
     });
 }
 
@@ -606,4 +610,7 @@ async function loadQRCode() {
 }
 
 // Note: window.ws is updated dynamically when WebSocket connections are created
-// (see initDesktopView, autoRejoin, joinGame functions)
+// (see initDesktopView, autoReconnect, connectToGame functions)
+
+// Global helper for character selection (called from HTML onclick)
+window.selectCharacter = selectCharacter;

@@ -19,6 +19,9 @@ class WebSocketClient {
         this.ws.onopen = () => {
             console.log('✅ WebSocket connected');
             this.reconnectAttempts = 0;
+            
+            // Send initial connect message to get connection ID
+            this.send('connect', {});
         };
         
         this.ws.onmessage = (event) => {

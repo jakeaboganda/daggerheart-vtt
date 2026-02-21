@@ -1,12 +1,13 @@
 // Daggerheart VTT - GM View
-// Phase 4: Save/Load & GM Controls
+// Phase 5A: Character-Centric Architecture
 
 console.log('🎮 GM View Initialized');
 
 let ws = null;
 let mapCanvas = null;
-let players = [];
+let characters = [];
 let saves = [];
+let connectionCount = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('GM DOM loaded');
@@ -141,7 +142,7 @@ async function loadGameSession(path) {
 }
 
 function clearAllStress() {
-    if (!confirm('Clear stress for all players?')) {
+    if (!confirm('Clear stress for all characters?')) {
         return;
     }
     
@@ -164,131 +165,140 @@ function handleServerMessage(message) {
     const { type, payload } = message;
     
     switch (type) {
-        case 'player_joined':
-            handlePlayerJoined(payload);
+        case 'connected':
+            handleConnected(payload);
             break;
-        case 'player_left':
-            handlePlayerLeft(payload);
+        case 'characters_list':
+            handleCharactersList(payload);
             break;
-        case 'players_list':
-            handlePlayersList(payload);
+        case 'character_spawned':
+            handleCharacterSpawned(payload);
             break;
-        case 'player_moved':
-            handlePlayerMoved(payload);
+        case 'character_moved':
+            handleCharacterMoved(payload);
             break;
         case 'character_created':
         case 'character_updated':
-        case 'player_name_updated':
-            // Refresh player list
-            requestPlayersList();
+            // Character was updated, will get new list
             break;
         default:
             console.log('GM received:', type, payload);
     }
 }
 
-function handlePlayerJoined(payload) {
-    const { player_id, name, position, color } = payload;
-    console.log(`Player joined: ${name}`);
-    
-    // Add to canvas
-    if (mapCanvas) {
-        mapCanvas.addPlayer(player_id, name, position, color);
-    }
-    
-    // Request full player list to update sidebar
-    requestPlayersList();
+function handleConnected(payload) {
+    const { connection_id } = payload;
+    console.log('✅ GM Connected with ID:', connection_id);
 }
 
-function handlePlayerLeft(payload) {
-    const { player_id, name } = payload;
-    console.log(`Player left: ${name}`);
-    
-    // Remove from canvas
-    if (mapCanvas) {
-        mapCanvas.removePlayer(player_id);
-    }
-    
-    // Update player list
-    requestPlayersList();
-}
-
-function handlePlayersList(payload) {
-    players = payload.players;
-    console.log('Players list:', players);
+function handleCharactersList(payload) {
+    characters = payload.characters;
+    console.log('Characters list:', characters);
     
     // Update canvas
     if (mapCanvas) {
         mapCanvas.clearPlayers();
-        players.forEach(player => {
-            const displayName = player.character_name || player.name;
-            mapCanvas.addPlayer(player.player_id, displayName, player.position, player.color);
+        characters.forEach(char => {
+            mapCanvas.addPlayer(char.id, char.name, char.position, char.color);
         });
     }
     
     // Update sidebar
-    renderPlayersList();
+    renderCharactersList();
     updateSessionInfo();
 }
 
-function handlePlayerMoved(payload) {
-    const { player_id, position } = payload;
+function handleCharacterSpawned(payload) {
+    const { character_id, name, position, color, is_npc } = payload;
+    console.log(`Character spawned: ${name} (${is_npc ? 'NPC' : 'PC'})`);
+    
+    // Add to characters list
+    characters.push({
+        id: character_id,
+        name,
+        position,
+        color,
+        is_npc,
+    });
+    
+    // Add to canvas
+    if (mapCanvas) {
+        mapCanvas.addPlayer(character_id, name, position, color);
+    }
+    
+    // Update sidebar
+    renderCharactersList();
+    updateSessionInfo();
+}
+
+function handleCharacterMoved(payload) {
+    const { character_id, position } = payload;
+    
+    // Update in characters list
+    const char = characters.find(c => c.id === character_id);
+    if (char) {
+        char.position = position;
+    }
     
     // Update canvas
     if (mapCanvas) {
-        mapCanvas.updatePlayerPosition(player_id, position);
+        mapCanvas.updatePlayerPosition(character_id, position);
     }
 }
 
-function renderPlayersList() {
+function renderCharactersList() {
     const container = document.getElementById('players-list-gm');
     
-    if (players.length === 0) {
-        container.innerHTML = '<p class="empty-state">No players connected</p>';
+    if (characters.length === 0) {
+        container.innerHTML = '<p class="empty-state">No characters in game</p>';
         return;
     }
     
-    container.innerHTML = players.map(player => {
-        const displayName = player.character_name || player.name;
-        const statusClass = player.connected ? 'status-online' : 'status-offline';
-        const statusText = player.connected ? 'Online' : 'Offline';
-        
-        let characterInfo = '';
-        if (player.has_character && player.character_name) {
-            characterInfo = `
-                <div class="player-stats">
-                    <div class="stat">Char: ${player.character_name}</div>
-                    <div class="stat">Status: Active</div>
-                </div>
-            `;
-        } else {
-            characterInfo = '<p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 0.5rem;">No character yet</p>';
-        }
+    container.innerHTML = characters.map(char => {
+        const typeLabel = char.is_npc ? 'NPC' : 'PC';
+        const typeClass = char.is_npc ? 'char-npc' : 'char-pc';
+        const controlInfo = char.controlled_by_me ? '(You)' : 
+                           char.controlled_by_other ? '(Controlled)' : 
+                           '(Available)';
         
         return `
-            <div class="player-item-gm">
+            <div class="player-item-gm ${typeClass}">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <strong>
-                        <span class="status-indicator ${statusClass}"></span>
-                        ${displayName}
+                        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${char.color};margin-right:8px;"></span>
+                        ${char.name}
                     </strong>
-                    <span style="font-size: 0.75rem; color: var(--text-dim);">${statusText}</span>
+                    <span style="font-size: 0.75rem; color: var(--text-dim);">${typeLabel}</span>
                 </div>
-                ${characterInfo}
+                <div class="player-stats">
+                    <div class="stat">${char.class} • ${char.ancestry}</div>
+                    <div class="stat">${controlInfo}</div>
+                </div>
             </div>
         `;
     }).join('');
 }
 
 function updateSessionInfo() {
-    const playerCount = players.length;
-    const characterCount = players.filter(p => p.has_character).length;
+    const pcCount = characters.filter(c => !c.is_npc).length;
+    const npcCount = characters.filter(c => c.is_npc).length;
     
-    document.getElementById('player-count').textContent = playerCount;
-    document.getElementById('character-count').textContent = characterCount;
+    document.getElementById('player-count').textContent = connectionCount;
+    document.getElementById('character-count').textContent = `${pcCount} PCs, ${npcCount} NPCs`;
 }
 
-function requestPlayersList() {
-    // The server will send players_list when we join
-    // For now, we rely on the automatic broadcast
+async function fetchGameState() {
+    try {
+        const response = await fetch('/api/game-state');
+        const data = await response.json();
+        
+        connectionCount = data.connection_count || 0;
+        updateSessionInfo();
+    } catch (error) {
+        console.error('Failed to fetch game state:', error);
+    }
 }
+
+// Fetch game state periodically
+setInterval(fetchGameState, 5000);
+fetchGameState(); // Initial fetch

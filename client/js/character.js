@@ -47,6 +47,10 @@ class CharacterCreator {
         this.render();
     }
     
+    setName(name) {
+        this.data.name = name;
+    }
+    
     render() {
         if (!this.container) return;
         
