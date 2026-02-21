@@ -113,13 +113,13 @@ The Daggerheart VTT is being developed in 4 distinct phases, each building on th
 **Goal:** Complete session lifecycle with persistence and GM tools.
 
 ### Features
-- [ ] Save game state to JSON file
-- [ ] Load previous sessions
-- [ ] GM view with enhanced controls
-- [ ] Add/remove players mid-session
-- [ ] Manage NPCs
-- [ ] Session history/logs
-- [ ] Export/import characters
+- [x] Save game state to JSON file
+- [x] Load previous sessions
+- [x] GM view with enhanced controls
+- [x] Real-time player monitoring
+- [x] Session history/logs
+- [x] Map view for GM
+- [x] Player statistics panel
 
 ### Demo Command
 ```bash

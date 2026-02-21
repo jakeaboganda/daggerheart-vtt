@@ -10,10 +10,9 @@ use qrcode::QrCode;
 use serde_json::json;
 use std::io::Cursor;
 use std::net::UdpSocket;
-use std::sync::Arc;
 
-use crate::websocket::AppState;
 use crate::save::SavedSession;
+use crate::websocket::AppState;
 
 /// Get the local network IP address
 fn get_local_ip() -> String {
@@ -95,7 +94,7 @@ pub async fn gm() -> Html<String> {
 pub async fn save_game(State(state): State<AppState>) -> Json<serde_json::Value> {
     let game = state.game.read().await;
     let session = SavedSession::from_game_state(&game, "Manual Save".to_string());
-    
+
     match session.save_to_file() {
         Ok(path) => Json(json!({
             "success": true,
@@ -123,7 +122,7 @@ pub async fn list_saves() -> Json<serde_json::Value> {
                     })
                 })
                 .collect();
-            
+
             Json(json!({
                 "success": true,
                 "saves": saves_data
@@ -150,27 +149,27 @@ pub async fn load_game(
             }))
         }
     };
-    
+
     let path = std::path::Path::new(path_str);
-    
+
     match SavedSession::load_from_file(path) {
         Ok(session) => {
             // Apply to game state
             let mut game = state.game.write().await;
-            
+
             if let Err(e) = session.apply_to_game(&mut game) {
                 return Json(json!({
                     "success": false,
                     "error": format!("Failed to apply session: {}", e)
                 }));
             }
-            
+
             // Notify all connected clients to refresh
             let msg = crate::protocol::ServerMessage::Error {
                 message: "Session loaded. Please refresh your browser.".to_string(),
             };
             let _ = state.broadcaster.send(msg.to_json());
-            
+
             Json(json!({
                 "success": true,
                 "session": session

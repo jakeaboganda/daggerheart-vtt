@@ -73,7 +73,13 @@ impl SavedSession {
         let safe_name = self
             .name
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>();
         let filename = format!("{}_{}.json", safe_name, timestamp);
         let path = Path::new(SAVES_DIR).join(&filename);
@@ -89,11 +95,10 @@ impl SavedSession {
 
     /// Load from file
     pub fn load_from_file(path: &Path) -> Result<Self, String> {
-        let json = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let json = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
-        let mut session: SavedSession = serde_json::from_str(&json)
-            .map_err(|e| format!("Failed to deserialize: {}", e))?;
+        let mut session: SavedSession =
+            serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize: {}", e))?;
 
         // Update last_saved timestamp
         session.last_saved = Utc::now();
@@ -274,8 +279,14 @@ mod tests {
 
         // Create character
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
-        game.create_character(&player.id, "Theron".to_string(), Class::Warrior, Ancestry::Human, attrs)
-            .unwrap();
+        game.create_character(
+            &player.id,
+            "Theron".to_string(),
+            Class::Warrior,
+            Ancestry::Human,
+            attrs,
+        )
+        .unwrap();
 
         // Save
         let session = SavedSession::from_game_state(&game, "Test Session".to_string());
@@ -299,8 +310,14 @@ mod tests {
         let player = game.add_player("Alice".to_string());
 
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
-        game.create_character(&player.id, "Theron".to_string(), Class::Warrior, Ancestry::Human, attrs)
-            .unwrap();
+        game.create_character(
+            &player.id,
+            "Theron".to_string(),
+            Class::Warrior,
+            Ancestry::Human,
+            attrs,
+        )
+        .unwrap();
 
         // Save
         let session = SavedSession::from_game_state(&game, "Test".to_string());
