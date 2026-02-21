@@ -88,11 +88,12 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                         .into_iter()
                                         .map(|p| PlayerInfo {
                                             player_id: p.id.to_string(),
-                                            name: p.name,
+                                            name: p.name.clone(),
                                             connected: p.connected,
                                             position: p.position,
-                                            color: p.color,
+                                            color: p.color.clone(),
                                             has_character: p.character.is_some(),
+                                            character_name: p.character.as_ref().map(|c| c.name.clone()),
                                         })
                                         .collect()
                                 };
@@ -202,6 +203,13 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                                         character: character.to_data(),
                                     };
                                     let _ = state_clone.broadcaster.send(msg.to_json());
+                                    
+                                    // Broadcast name update (so tokens display character name)
+                                    let name_msg = ServerMessage::PlayerNameUpdated {
+                                        player_id: pid.to_string(),
+                                        display_name: character.name.clone(),
+                                    };
+                                    let _ = state_clone.broadcaster.send(name_msg.to_json());
                                 }
                             }
                             

@@ -138,6 +138,12 @@ pub enum ServerMessage {
         character: CharacterData,
     },
     
+    #[serde(rename = "player_name_updated")]
+    PlayerNameUpdated {
+        player_id: String,
+        display_name: String, // Character name for display
+    },
+    
     #[serde(rename = "roll_result")]
     RollResult {
         player_id: String,
@@ -159,6 +165,7 @@ pub struct PlayerInfo {
     pub position: Position,
     pub color: String,
     pub has_character: bool,
+    pub character_name: Option<String>, // Character name after creation
 }
 
 impl ServerMessage {

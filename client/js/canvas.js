@@ -43,6 +43,14 @@ class MapCanvas {
         this.animating.delete(playerId);
     }
     
+    updatePlayerName(playerId, newName) {
+        const player = this.players.get(playerId);
+        if (player) {
+            player.name = newName;
+            console.log('Updated player name:', playerId, '->', newName);
+        }
+    }
+    
     updatePlayerPosition(playerId, newPosition) {
         const player = this.players.get(playerId);
         if (player) {
