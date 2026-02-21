@@ -310,7 +310,8 @@ MIT OR Apache-2.0 (same as daggerheart-engine)
 
 ## 🔗 Links
 
-- **Engine Repository:** [daggerheart-engine](../daggerheart-engine)
+- **Repository:** https://github.com/jakeaboganda/daggerheart-vtt
+- **Engine Repository:** https://github.com/jakeaboganda/daggerheart-engine
 - **Daggerheart Official:** https://www.daggerheart.com/
 - **Daggerheart SRD:** https://www.daggerheart.com/srd/
 
