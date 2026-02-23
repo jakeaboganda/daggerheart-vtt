@@ -151,6 +151,9 @@ function setupMobileCanvas(canvasId) {
 function autoReconnect(characterId) {
     console.log('Auto-reconnecting and selecting character:', characterId);
     
+    // Set flag to indicate we're auto-reconnecting (for error handling)
+    window.isAutoReconnecting = true;
+    
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
     window.ws = ws; // Update global reference
@@ -160,6 +163,11 @@ function autoReconnect(characterId) {
     setTimeout(() => {
         if (ws) {
             ws.send('select_character', { character_id: characterId });
+            
+            // Clear auto-reconnect flag after a delay
+            setTimeout(() => {
+                window.isAutoReconnecting = false;
+            }, 2000);
         }
     }, 500);
 }
@@ -522,6 +530,34 @@ function handleRollResult(payload) {
 function handleError(payload) {
     const { message } = payload;
     console.error('Server error:', message);
+    
+    // If this is an auto-reconnect failure, handle it gracefully
+    if (window.isAutoReconnecting && (
+        message.includes('Character not found') || 
+        message.includes('Connection not found') ||
+        message.includes('select character')
+    )) {
+        console.warn('Auto-reconnect failed:', message, '- Clearing saved session.');
+        
+        // Clear saved character
+        localStorage.removeItem(STORAGE_KEYS.CHARACTER_ID);
+        localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'false');
+        window.isAutoReconnecting = false;
+        
+        // Show join screen instead of error popup
+        const joinPanel = document.getElementById('join-panel');
+        const charSheet = document.getElementById('char-sheet-panel');
+        const charCreation = document.getElementById('char-creation-panel');
+        
+        if (joinPanel) joinPanel.style.display = 'block';
+        if (charSheet) charSheet.style.display = 'none';
+        if (charCreation) charCreation.style.display = 'none';
+        
+        console.log('✅ Returned to join screen. Please join the game again.');
+        return;
+    }
+    
+    // For other errors, show alert as normal
     alert(`Error: ${message}`);
 }
 
