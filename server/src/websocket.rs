@@ -2,7 +2,6 @@
 
 use axum::{
     extract::{
-
         ws::{Message, WebSocket},
         State, WebSocketUpgrade,
     },
@@ -15,8 +14,8 @@ use uuid::Uuid;
 use daggerheart_engine::character::{Ancestry, Attributes, Class};
 
 use crate::{
-    game::{GameState, SharedGameState},
-    protocol::{CharacterInfo, ClientMessage, ServerMessage},
+    game::{self, GameState, SharedGameState},
+    protocol::{self, CharacterInfo, ClientMessage, ServerMessage},
 };
 
 pub type Broadcaster = broadcast::Sender<String>;
@@ -86,17 +85,20 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Clean up connection on disconnect
     println!("👋 Connection disconnected: {}", conn_id);
     let mut game = state.game.write().await;
-    
+
     // Get controlled character before removing connection
     let controlled_char_id = game.control_mapping.get(&conn_id).copied();
-    
+
     game.remove_connection(&conn_id);
-    
+
     // Broadcast updated characters list
     drop(game);
     broadcast_characters_list(&state).await;
-    
-    println!("   Connection {} removed, controlled character: {:?}", conn_id, controlled_char_id);
+
+    println!(
+        "   Connection {} removed, controlled character: {:?}",
+        conn_id, controlled_char_id
+    );
 }
 
 /// Handle a client message
@@ -140,6 +142,49 @@ async fn handle_client_message(state: &AppState, conn_id: &Uuid, text: &str) {
 
         ClientMessage::UpdateResource { resource, amount } => {
             handle_update_resource(state, conn_id, resource, amount).await;
+        }
+
+        ClientMessage::RequestRoll {
+            target_type,
+            target_character_ids,
+            roll_type,
+            attribute,
+            difficulty,
+            context,
+            narrative_stakes,
+            situational_modifier,
+            has_advantage,
+            is_combat,
+        } => {
+            handle_request_roll(
+                state,
+                target_type,
+                target_character_ids,
+                roll_type,
+                attribute,
+                difficulty,
+                context,
+                narrative_stakes,
+                situational_modifier,
+                has_advantage,
+                is_combat,
+            )
+            .await;
+        }
+
+        ClientMessage::ExecuteRoll {
+            request_id,
+            spend_hope_for_bonus,
+            chosen_experience,
+        } => {
+            handle_execute_roll(
+                state,
+                conn_id,
+                request_id,
+                spend_hope_for_bonus,
+                chosen_experience,
+            )
+            .await;
         }
     }
 }
@@ -204,7 +249,7 @@ async fn handle_create_character(
     let mut game = state.game.write().await;
     let character = game.create_character(name, class, ancestry, attrs);
     let char_id = character.id;
-    
+
     println!("✨ Character created: {} ({})", character.name, char_id);
 
     // Auto-select the newly created character
@@ -257,7 +302,7 @@ async fn handle_select_character(state: &AppState, conn_id: &Uuid, character_id:
     };
 
     let mut game = state.game.write().await;
-    
+
     if let Err(e) = game.select_character(conn_id, &char_uuid) {
         drop(game);
         send_error(state, &format!("Failed to select character: {}", e)).await;
@@ -276,7 +321,10 @@ async fn handle_select_character(state: &AppState, conn_id: &Uuid, character_id:
     let character_data = character.to_data();
     drop(game);
 
-    println!("🎮 Connection {} selected character: {}", conn_id, character.name);
+    println!(
+        "🎮 Connection {} selected character: {}",
+        conn_id, character.name
+    );
 
     // Send character selected confirmation
     let msg = ServerMessage::CharacterSelected {
@@ -292,7 +340,7 @@ async fn handle_select_character(state: &AppState, conn_id: &Uuid, character_id:
 /// Handle character movement
 async fn handle_move_character(state: &AppState, conn_id: &Uuid, x: f32, y: f32) {
     let game = state.game.read().await;
-    
+
     let char_id = match game.control_mapping.get(conn_id) {
         Some(id) => *id,
         None => {
@@ -305,7 +353,7 @@ async fn handle_move_character(state: &AppState, conn_id: &Uuid, x: f32, y: f32)
 
     let mut game = state.game.write().await;
     let position = crate::protocol::Position::new(x, y);
-    
+
     if !game.update_character_position(&char_id, position) {
         drop(game);
         send_error(state, "Failed to update position").await;
@@ -329,7 +377,7 @@ async fn handle_roll_duality(
     with_advantage: bool,
 ) {
     let game = state.game.read().await;
-    
+
     let char_id = match game.control_mapping.get(conn_id) {
         Some(id) => *id,
         None => {
@@ -351,7 +399,10 @@ async fn handle_roll_duality(
     let roll = game.roll_duality(modifier, with_advantage);
     drop(game);
 
-    println!("🎲 {} rolled: {}d12 = {}", character.name, roll.hope, roll.fear);
+    println!(
+        "🎲 {} rolled: {}d12 = {}",
+        character.name, roll.hope, roll.fear
+    );
 
     // Broadcast roll result
     let msg = ServerMessage::RollResult {
@@ -363,14 +414,9 @@ async fn handle_roll_duality(
 }
 
 /// Handle resource update
-async fn handle_update_resource(
-    state: &AppState,
-    conn_id: &Uuid,
-    resource: String,
-    amount: i32,
-) {
+async fn handle_update_resource(state: &AppState, conn_id: &Uuid, resource: String, amount: i32) {
     let game = state.game.read().await;
-    
+
     let char_id = match game.control_mapping.get(conn_id) {
         Some(id) => *id,
         None => {
@@ -382,7 +428,7 @@ async fn handle_update_resource(
     drop(game);
 
     let mut game = state.game.write().await;
-    
+
     let character = match game.get_character_mut(&char_id) {
         Some(c) => c,
         None => {
@@ -466,12 +512,13 @@ async fn broadcast_characters_list(_state: &AppState) {
 /// Build character list with control information for a specific connection
 fn build_character_list(game: &GameState, conn_id: &Uuid) -> Vec<CharacterInfo> {
     let my_char_id = game.control_mapping.get(conn_id).copied();
-    
+
     game.get_characters()
         .iter()
         .map(|character| {
             let controlled_by_me = Some(character.id) == my_char_id;
-            let controlled_by_other = game.control_mapping
+            let controlled_by_other = game
+                .control_mapping
                 .values()
                 .any(|&char_id| char_id == character.id && Some(char_id) != my_char_id);
 
@@ -488,6 +535,243 @@ fn build_character_list(game: &GameState, conn_id: &Uuid) -> Vec<CharacterInfo> 
             }
         })
         .collect()
+}
+
+// ===== Phase 1: GM-Initiated Dice Rolls =====
+
+/// Handle GM roll request
+async fn handle_request_roll(
+    state: &AppState,
+    target_type: protocol::RollTargetType,
+    target_character_ids: Vec<String>,
+    roll_type: protocol::RollType,
+    attribute: Option<String>,
+    difficulty: u16,
+    context: String,
+    narrative_stakes: Option<String>,
+    situational_modifier: i8,
+    has_advantage: bool,
+    is_combat: bool,
+) {
+    use uuid::Uuid;
+
+    let mut game = state.game.write().await;
+
+    // Parse target character IDs
+    let mut target_uuids = Vec::new();
+    match target_type {
+        protocol::RollTargetType::Specific => {
+            for id_str in &target_character_ids {
+                if let Ok(uuid) = Uuid::parse_str(id_str) {
+                    if game.characters.contains_key(&uuid) {
+                        target_uuids.push(uuid);
+                    }
+                }
+            }
+        }
+        protocol::RollTargetType::All => {
+            target_uuids = game.get_player_characters().iter().map(|c| c.id).collect();
+        }
+        protocol::RollTargetType::Npc => {
+            // For MVP, treat as specific
+            for id_str in &target_character_ids {
+                if let Ok(uuid) = Uuid::parse_str(id_str) {
+                    if game.characters.contains_key(&uuid) {
+                        target_uuids.push(uuid);
+                    }
+                }
+            }
+        }
+    }
+
+    if target_uuids.is_empty() {
+        send_error(state, "No valid characters targeted").await;
+        return;
+    }
+
+    // Create roll request
+    let request_id = Uuid::new_v4().to_string();
+    let request = game::PendingRollRequest {
+        id: request_id.clone(),
+        target_character_ids: target_uuids.clone(),
+        roll_type: roll_type.clone(),
+        attribute: attribute.clone(),
+        difficulty,
+        context: context.clone(),
+        narrative_stakes: narrative_stakes.clone(),
+        situational_modifier,
+        has_advantage,
+        is_combat,
+        completed_by: Vec::new(),
+        timestamp: std::time::SystemTime::now(),
+    };
+
+    game.pending_roll_requests
+        .insert(request_id.clone(), request);
+
+    // Send roll request to each targeted character
+    for char_id in &target_uuids {
+        if let Some(character) = game.characters.get(char_id) {
+            // Calculate base modifier
+            let attr_mod = if let Some(ref attr) = attribute {
+                character.get_attribute(attr).unwrap_or(0)
+            } else {
+                0
+            };
+
+            let prof_mod = match roll_type {
+                protocol::RollType::Attack | protocol::RollType::Spellcast => {
+                    character.proficiency_bonus()
+                }
+                _ => 0,
+            };
+
+            let base_modifier = attr_mod + prof_mod;
+            let total_modifier = base_modifier + situational_modifier;
+
+            let can_spend_hope = character.hope.current >= 1 && !character.experiences.is_empty();
+
+            let msg = protocol::ServerMessage::RollRequested {
+                request_id: request_id.clone(),
+                roll_type: roll_type.clone(),
+                attribute: attribute.clone(),
+                difficulty,
+                context: context.clone(),
+                narrative_stakes: narrative_stakes.clone(),
+                base_modifier,
+                situational_modifier,
+                total_modifier,
+                has_advantage,
+                your_attribute_value: attr_mod,
+                your_proficiency: prof_mod,
+                can_spend_hope,
+                experiences: character.experiences.clone(),
+            };
+
+            state.broadcaster.send(msg.to_json()).ok();
+        }
+    }
+
+    // Send status to GM
+    let pending: Vec<String> = target_uuids
+        .iter()
+        .filter_map(|id| game.characters.get(id).map(|c| c.name.clone()))
+        .collect();
+
+    let status_msg = protocol::ServerMessage::RollRequestStatus {
+        request_id,
+        pending_characters: pending,
+        completed_characters: Vec::new(),
+    };
+
+    state.broadcaster.send(status_msg.to_json()).ok();
+}
+
+/// Handle player executing a roll
+async fn handle_execute_roll(
+    state: &AppState,
+    conn_id: &Uuid,
+    request_id: String,
+    spend_hope: bool,
+    chosen_experience: Option<String>,
+) {
+    let mut game = state.game.write().await;
+
+    // Get character ID for this connection
+    let char_id = match game.control_mapping.get(conn_id) {
+        Some(id) => *id,
+        None => {
+            send_error(state, "No character controlled").await;
+            return;
+        }
+    };
+
+    // Execute the roll
+    let roll_result = match game.execute_roll(&char_id, &request_id, spend_hope) {
+        Ok(result) => result,
+        Err(e) => {
+            send_error(state, &e).await;
+            return;
+        }
+    };
+
+    // Get character name and request context
+    let character_name = game
+        .characters
+        .get(&char_id)
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let request = game.pending_roll_requests.get(&request_id).cloned();
+    let context = request
+        .as_ref()
+        .map(|r| r.context.clone())
+        .unwrap_or_default();
+    let roll_type = request
+        .as_ref()
+        .map(|r| r.roll_type.clone())
+        .unwrap_or(protocol::RollType::Action);
+
+    // Get new Hope/Fear values
+    let character = game.characters.get(&char_id).unwrap();
+    let new_hope = character.hope.current;
+    let new_fear = game.fear_pool;
+
+    // Create outcome description
+    let outcome_description = match roll_result.success_type {
+        protocol::SuccessType::CriticalSuccess => "CRITICAL SUCCESS".to_string(),
+        protocol::SuccessType::SuccessWithHope => "SUCCESS WITH HOPE".to_string(),
+        protocol::SuccessType::SuccessWithFear => "SUCCESS WITH FEAR".to_string(),
+        protocol::SuccessType::Failure => "FAILURE".to_string(),
+    };
+
+    // Broadcast result to all clients
+    let msg = protocol::ServerMessage::DetailedRollResult {
+        request_id: request_id.clone(),
+        character_id: char_id.to_string(),
+        character_name,
+        roll_type,
+        context,
+        roll_details: roll_result,
+        outcome_description,
+        new_hope,
+        new_fear,
+    };
+
+    state.broadcaster.send(msg.to_json()).ok();
+
+    // Update roll request status
+    if let Some(req) = game.pending_roll_requests.get(&request_id) {
+        let pending: Vec<String> = req
+            .target_character_ids
+            .iter()
+            .filter(|id| !req.completed_by.contains(id))
+            .filter_map(|id| game.characters.get(id).map(|c| c.name.clone()))
+            .collect();
+
+        let completed: Vec<String> = req
+            .completed_by
+            .iter()
+            .filter_map(|id| game.characters.get(id).map(|c| c.name.clone()))
+            .collect();
+
+        let status_msg = protocol::ServerMessage::RollRequestStatus {
+            request_id,
+            pending_characters: pending,
+            completed_characters: completed,
+        };
+
+        state.broadcaster.send(status_msg.to_json()).ok();
+    }
+
+    // Broadcast updated character data
+    if let Some(character) = game.characters.get(&char_id).cloned() {
+        let msg = protocol::ServerMessage::CharacterUpdated {
+            character_id: char_id.to_string(),
+            character: character.to_data(),
+        };
+        state.broadcaster.send(msg.to_json()).ok();
+    }
 }
 
 #[cfg(test)]

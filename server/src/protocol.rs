@@ -54,7 +54,7 @@ pub struct ResourceData {
     pub maximum: i32,
 }
 
-/// Dice roll result
+/// Dice roll result (legacy - kept for compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RollResult {
     pub hope: i32,
@@ -64,6 +64,73 @@ pub struct RollResult {
     pub controlling_die: String, // "Hope" or "Fear"
     pub is_critical: bool,
     pub is_success: bool,
+}
+
+/// Roll target type for GM requests
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollTargetType {
+    Specific, // One or more specific characters
+    All,      // All player characters
+    Npc,      // GM-controlled character
+}
+
+/// Type of roll being requested
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollType {
+    Action,    // General action check (use attribute)
+    Attack,    // Melee/ranged attack
+    Spellcast, // Casting a spell
+    Save,      // Reactive save
+}
+
+/// Success type of a roll
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SuccessType {
+    Failure,
+    SuccessWithHope,
+    SuccessWithFear,
+    CriticalSuccess,
+}
+
+/// Which die is controlling the outcome
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ControllingDie {
+    Hope,
+    Fear,
+    Tied, // Only when doubles
+}
+
+/// Detailed roll result for Phase 1
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedRollResult {
+    // The roll
+    pub hope_die: u8,              // 1-12
+    pub fear_die: u8,              // 1-12
+    pub advantage_die: Option<u8>, // 1-6 if had advantage
+
+    // Modifiers breakdown
+    pub attribute_modifier: i8,
+    pub proficiency_modifier: i8,
+    pub situational_modifier: i8,
+    pub hope_bonus: i8, // +2 if spent Hope via Experience
+    pub total_modifier: i8,
+
+    // Result
+    pub total: u16,
+    pub difficulty: u16,
+
+    // Outcome
+    pub success_type: SuccessType,
+    pub controlling_die: ControllingDie,
+    pub is_critical: bool,
+
+    // Resource changes
+    pub hope_change: i8, // +1, -1, or 0
+    pub fear_change: i8, // +1 or 0
 }
 
 /// Character info for listing (includes control status)
@@ -115,6 +182,29 @@ pub enum ClientMessage {
         resource: String, // "hp", "stress", or "hope"
         amount: i32,      // positive = gain, negative = lose
     },
+
+    /// GM requests a dice roll (Phase 1)
+    #[serde(rename = "request_roll")]
+    RequestRoll {
+        target_type: RollTargetType,
+        target_character_ids: Vec<String>,
+        roll_type: RollType,
+        attribute: Option<String>, // "agility", "strength", etc.
+        difficulty: u16,
+        context: String, // "Leap across the chasm"
+        narrative_stakes: Option<String>,
+        situational_modifier: i8,
+        has_advantage: bool,
+        is_combat: bool,
+    },
+
+    /// Player executes a requested roll (Phase 1)
+    #[serde(rename = "execute_roll")]
+    ExecuteRoll {
+        request_id: String,
+        spend_hope_for_bonus: bool,
+        chosen_experience: Option<String>,
+    },
 }
 
 /// Server → Client messages
@@ -148,10 +238,7 @@ pub enum ServerMessage {
 
     /// A character was removed from the game
     #[serde(rename = "character_removed")]
-    CharacterRemoved {
-        character_id: String,
-        name: String,
-    },
+    CharacterRemoved { character_id: String, name: String },
 
     /// A character moved
     #[serde(rename = "character_moved")]
@@ -174,12 +261,53 @@ pub enum ServerMessage {
         character: CharacterData,
     },
 
-    /// Dice roll result
+    /// Dice roll result (legacy)
     #[serde(rename = "roll_result")]
     RollResult {
         character_id: String,
         character_name: String,
         roll: RollResult,
+    },
+
+    /// Roll requested by GM (Phase 1)
+    #[serde(rename = "roll_requested")]
+    RollRequested {
+        request_id: String,
+        roll_type: RollType,
+        attribute: Option<String>,
+        difficulty: u16,
+        context: String,
+        narrative_stakes: Option<String>,
+        base_modifier: i8,
+        situational_modifier: i8,
+        total_modifier: i8,
+        has_advantage: bool,
+        your_attribute_value: i8,
+        your_proficiency: i8,
+        can_spend_hope: bool,
+        experiences: Vec<String>,
+    },
+
+    /// Detailed roll result (Phase 1)
+    #[serde(rename = "detailed_roll_result")]
+    DetailedRollResult {
+        request_id: String,
+        character_id: String,
+        character_name: String,
+        roll_type: RollType,
+        context: String,
+        roll_details: DetailedRollResult,
+        outcome_description: String,
+        new_hope: u8,
+        new_fear: u8,
+    },
+
+    /// Roll request status (GM-only, Phase 1)
+    #[serde(rename = "roll_request_status")]
+    RollRequestStatus {
+        request_id: String,
+        pending_characters: Vec<String>,
+        completed_characters: Vec<String>,
     },
 
     /// Error message
@@ -368,9 +496,26 @@ mod tests {
                 resource: "hp".to_string(),
                 amount: -2,
             },
+            ClientMessage::RequestRoll {
+                target_type: RollTargetType::Specific,
+                target_character_ids: vec!["char-1".to_string()],
+                roll_type: RollType::Action,
+                attribute: Some("agility".to_string()),
+                difficulty: 14,
+                context: "Leap across chasm".to_string(),
+                narrative_stakes: None,
+                situational_modifier: 0,
+                has_advantage: false,
+                is_combat: false,
+            },
+            ClientMessage::ExecuteRoll {
+                request_id: "req-1".to_string(),
+                spend_hope_for_bonus: false,
+                chosen_experience: None,
+            },
         ];
 
-        assert_eq!(messages.len(), 6);
+        assert_eq!(messages.len(), 8);
     }
 
     #[test]
@@ -380,9 +525,7 @@ mod tests {
             ServerMessage::Connected {
                 connection_id: "conn-1".to_string(),
             },
-            ServerMessage::CharactersList {
-                characters: vec![],
-            },
+            ServerMessage::CharactersList { characters: vec![] },
             ServerMessage::CharacterSelected {
                 character_id: "char-1".to_string(),
                 character: CharacterData {
@@ -430,5 +573,97 @@ mod tests {
         ];
 
         assert_eq!(messages.len(), 7);
+    }
+
+    // Phase 1: GM-Initiated Dice Rolls Tests
+
+    #[test]
+    fn test_request_roll_deserialize() {
+        let json = r#"{
+            "type":"request_roll",
+            "payload":{
+                "target_type":"specific",
+                "target_character_ids":["char-123"],
+                "roll_type":"action",
+                "attribute":"agility",
+                "difficulty":14,
+                "context":"Leap across chasm",
+                "narrative_stakes":null,
+                "situational_modifier":0,
+                "has_advantage":false,
+                "is_combat":false
+            }
+        }"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+
+        match msg {
+            ClientMessage::RequestRoll {
+                target_type,
+                difficulty,
+                context,
+                ..
+            } => {
+                assert!(matches!(target_type, RollTargetType::Specific));
+                assert_eq!(difficulty, 14);
+                assert_eq!(context, "Leap across chasm");
+            }
+            _ => panic!("Wrong message type"),
+        }
+    }
+
+    #[test]
+    fn test_execute_roll_deserialize() {
+        let json = r#"{
+            "type":"execute_roll",
+            "payload":{
+                "request_id":"req-123",
+                "spend_hope_for_bonus":true,
+                "chosen_experience":"Former acrobat"
+            }
+        }"#;
+        let msg: ClientMessage = serde_json::from_str(json).unwrap();
+
+        match msg {
+            ClientMessage::ExecuteRoll {
+                request_id,
+                spend_hope_for_bonus,
+                chosen_experience,
+            } => {
+                assert_eq!(request_id, "req-123");
+                assert!(spend_hope_for_bonus);
+                assert_eq!(chosen_experience, Some("Former acrobat".to_string()));
+            }
+            _ => panic!("Wrong message type"),
+        }
+    }
+
+    #[test]
+    fn test_success_type_serialization() {
+        let success = SuccessType::CriticalSuccess;
+        let json = serde_json::to_string(&success).unwrap();
+        assert_eq!(json, r#""critical_success""#);
+
+        let loaded: SuccessType = serde_json::from_str(&json).unwrap();
+        assert_eq!(success, loaded);
+    }
+
+    #[test]
+    fn test_controlling_die_serialization() {
+        let die = ControllingDie::Hope;
+        let json = serde_json::to_string(&die).unwrap();
+        assert_eq!(json, r#""hope""#);
+
+        let loaded: ControllingDie = serde_json::from_str(&json).unwrap();
+        assert_eq!(die, loaded);
+    }
+
+    #[test]
+    fn test_roll_type_serialization() {
+        let roll_type = RollType::Action;
+        let json = serde_json::to_string(&roll_type).unwrap();
+        assert_eq!(json, r#""action""#);
+
+        let loaded: RollType = serde_json::from_str(&json).unwrap();
+        assert!(matches!(loaded, RollType::Action));
     }
 }

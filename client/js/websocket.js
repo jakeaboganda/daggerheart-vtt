@@ -20,8 +20,8 @@ class WebSocketClient {
             console.log('✅ WebSocket connected');
             this.reconnectAttempts = 0;
             
-            // Send initial connect message to get connection ID
-            this.send('connect', {});
+            // Send initial connect message to get connection ID (no payload)
+            this.send('connect');
         };
         
         this.ws.onmessage = (event) => {
@@ -58,7 +58,10 @@ class WebSocketClient {
 
     send(type, payload) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            const message = { type, payload };
+            // For unit variants (no payload), only send type
+            const message = payload === undefined || payload === null 
+                ? { type } 
+                : { type, payload };
             console.log('📤 Sending:', message);
             this.ws.send(JSON.stringify(message));
         } else {

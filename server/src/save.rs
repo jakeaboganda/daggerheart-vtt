@@ -68,8 +68,7 @@ impl SavedCharacter {
     }
 
     fn to_character(&self) -> Result<Character, String> {
-        let id = Uuid::parse_str(&self.id)
-            .map_err(|e| format!("Invalid character ID: {}", e))?;
+        let id = Uuid::parse_str(&self.id).map_err(|e| format!("Invalid character ID: {}", e))?;
 
         let class = match self.class.as_str() {
             "Bard" => Class::Bard,
@@ -183,19 +182,17 @@ impl SavedSession {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize session: {}", e))?;
 
-        fs::write(&path, json)
-            .map_err(|e| format!("Failed to write save file: {}", e))?;
+        fs::write(&path, json).map_err(|e| format!("Failed to write save file: {}", e))?;
 
         Ok(path)
     }
 
     /// Load from JSON file
     pub fn load_from_file(path: &Path) -> Result<Self, String> {
-        let json = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read save file: {}", e))?;
+        let json =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read save file: {}", e))?;
 
-        serde_json::from_str(&json)
-            .map_err(|e| format!("Failed to parse save file: {}", e))
+        serde_json::from_str(&json).map_err(|e| format!("Failed to parse save file: {}", e))
     }
 
     /// List all saved sessions in the saves directory
@@ -253,14 +250,10 @@ mod tests {
     fn test_save_and_load() {
         let mut game = GameState::new();
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
-        
+
         // Create a character
-        let character = game.create_character(
-            "Theron".to_string(),
-            Class::Warrior,
-            Ancestry::Human,
-            attrs,
-        );
+        let character =
+            game.create_character("Theron".to_string(), Class::Warrior, Ancestry::Human, attrs);
 
         // Save session
         let session = SavedSession::from_game_state(&game, "Test Session".to_string());
@@ -283,9 +276,14 @@ mod tests {
     fn test_apply_to_game() {
         let mut game = GameState::new();
         let attrs = Attributes::from_array([2, 1, 1, 0, 0, -1]).unwrap();
-        
+
         // Create characters
-        game.create_character("Theron".to_string(), Class::Warrior, Ancestry::Human, attrs.clone());
+        game.create_character(
+            "Theron".to_string(),
+            Class::Warrior,
+            Ancestry::Human,
+            attrs.clone(),
+        );
         game.create_character("Elara".to_string(), Class::Wizard, Ancestry::Faerie, attrs);
 
         // Save
