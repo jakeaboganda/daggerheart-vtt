@@ -793,3 +793,120 @@ body.mobile .character-sheet {
     font-size: 1rem;
     margin-bottom: 1.5rem;
 }
+
+/* Roll Request Panel (Mobile) */
+.roll-request-panel {
+    background: linear-gradient(135deg, var(--hope-color) 0%, var(--fear-color) 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.roll-request-header h3 {
+    margin: 0 0 1rem 0;
+    color: white;
+    text-align: center;
+    font-size: 1.4rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.roll-request-details {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.roll-context {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: white;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.roll-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.roll-info:last-child {
+    border-bottom: none;
+}
+
+.roll-label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+}
+
+.roll-info span:last-child {
+    color: white;
+    font-weight: bold;
+}
+
+.difficulty-value {
+    font-size: 1.2rem;
+    color: var(--fear-color);
+    background: white;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+}
+
+.modifier-value {
+    font-size: 1.2rem;
+    color: var(--hope-color);
+    background: white;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+}
+
+.roll-request-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.hope-spend-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: white;
+    font-size: 0.9rem;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.hope-spend-option input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+#advantage-info {
+    background: rgba(255, 215, 0, 0.2);
+    padding: 0.5rem;
+    border-radius: 4px;
+    justify-content: center;
+}
+
+#advantage-info .roll-label {
+    color: var(--hope-color);
+    font-weight: bold;
+}

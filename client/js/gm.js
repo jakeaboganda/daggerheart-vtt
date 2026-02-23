@@ -38,6 +38,9 @@ function setupEventListeners() {
     
     // Refresh clients
     document.getElementById('refresh-clients').addEventListener('click', refreshClients);
+    
+    // Request roll button
+    document.getElementById('request-roll-btn').addEventListener('click', requestRoll);
 }
 
 async function saveGame() {
@@ -181,6 +184,13 @@ function handleServerMessage(message) {
         case 'character_updated':
             // Character was updated, will get new list
             break;
+        case 'roll_request_status':
+            updateRollStatus(payload);
+            break;
+        case 'detailed_roll_result':
+            console.log('Roll result:', payload);
+            // Results are shown on TV view
+            break;
         default:
             console.log('GM received:', type, payload);
     }
@@ -206,6 +216,9 @@ function handleCharactersList(payload) {
     // Update sidebar
     renderCharactersList();
     updateSessionInfo();
+    
+    // Update roll target dropdown
+    updateTargetDropdown(characters);
 }
 
 function handleCharacterSpawned(payload) {
@@ -302,3 +315,97 @@ async function fetchGameState() {
 // Fetch game state periodically
 setInterval(fetchGameState, 5000);
 fetchGameState(); // Initial fetch
+
+// Roll Request Functions
+function requestRoll() {
+    const target = document.getElementById('roll-target').value;
+    const attribute = document.getElementById('roll-attribute').value || null;
+    const difficulty = parseInt(document.getElementById('roll-difficulty').value);
+    const context = document.getElementById('roll-context').value || 'GM requested roll';
+    const hasAdvantage = document.getElementById('roll-advantage').checked;
+    
+    console.log('Requesting roll:', { target, attribute, difficulty, context, hasAdvantage });
+    
+    // Determine target type and IDs
+    let targetType = 'all';
+    let targetIds = [];
+    
+    if (target !== 'all') {
+        targetType = 'specific';
+        targetIds = [target];
+    }
+    
+    // Send roll request
+    ws.send('request_roll', {
+        target_type: targetType,
+        target_character_ids: targetIds,
+        roll_type: 'action',
+        attribute: attribute,
+        difficulty: difficulty,
+        context: context,
+        narrative_stakes: null,
+        situational_modifier: 0,
+        has_advantage: hasAdvantage,
+        is_combat: false,
+    });
+    
+    // Show status panel
+    const statusPanel = document.getElementById('roll-status-panel');
+    if (statusPanel) {
+        statusPanel.style.display = 'block';
+    }
+    
+    // Clear form
+    document.getElementById('roll-context').value = '';
+}
+
+function updateRollStatus(status) {
+    const completedList = document.getElementById('completed-list');
+    const pendingList = document.getElementById('pending-list');
+    
+    if (completedList) {
+        completedList.textContent = status.completed_characters.length > 0 
+            ? status.completed_characters.join(', ') 
+            : 'None';
+    }
+    
+    if (pendingList) {
+        pendingList.textContent = status.pending_characters.length > 0 
+            ? status.pending_characters.join(', ') 
+            : 'None';
+    }
+    
+    // If all done, hide panel after a delay
+    if (status.pending_characters.length === 0 && status.completed_characters.length > 0) {
+        setTimeout(() => {
+            const statusPanel = document.getElementById('roll-status-panel');
+            if (statusPanel) {
+                statusPanel.style.display = 'none';
+            }
+        }, 3000);
+    }
+}
+
+// Populate target dropdown when characters update
+function updateTargetDropdown(chars) {
+    const dropdown = document.getElementById('roll-target');
+    if (!dropdown) return;
+    
+    // Save current selection
+    const currentValue = dropdown.value;
+    
+    // Clear and repopulate
+    dropdown.innerHTML = '<option value="all">All Players</option>';
+    
+    chars.filter(c => !c.is_npc).forEach(char => {
+        const option = document.createElement('option');
+        option.value = char.id;
+        option.textContent = char.name;
+        dropdown.appendChild(option);
+    });
+    
+    // Restore selection if still valid
+    if (currentValue && Array.from(dropdown.options).some(opt => opt.value === currentValue)) {
+        dropdown.value = currentValue;
+    }
+}

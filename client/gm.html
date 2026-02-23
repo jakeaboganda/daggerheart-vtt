@@ -141,6 +141,66 @@
                 <button id="clear-stress-all" class="btn-secondary btn-small" style="width: 100%; margin-bottom: 0.5rem;">Clear All Stress</button>
                 <button id="refresh-clients" class="btn-secondary btn-small" style="width: 100%;">Refresh Clients</button>
             </div>
+            
+            <div class="control-panel" style="margin-top: 1rem;">
+                <h3>🎲 Request Roll</h3>
+                
+                <div style="margin-bottom: 0.75rem;">
+                    <label for="roll-target" style="display: block; margin-bottom: 0.25rem; color: var(--text-dim); font-size: 0.9rem;">Target:</label>
+                    <select id="roll-target" class="input-field" style="width: 100%;">
+                        <option value="all">All Players</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 0.75rem;">
+                    <label for="roll-attribute" style="display: block; margin-bottom: 0.25rem; color: var(--text-dim); font-size: 0.9rem;">Attribute:</label>
+                    <select id="roll-attribute" class="input-field" style="width: 100%;">
+                        <option value="">None (Raw Roll)</option>
+                        <option value="agility">Agility</option>
+                        <option value="strength">Strength</option>
+                        <option value="finesse">Finesse</option>
+                        <option value="instinct">Instinct</option>
+                        <option value="presence">Presence</option>
+                        <option value="knowledge">Knowledge</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 0.75rem;">
+                    <label for="roll-difficulty" style="display: block; margin-bottom: 0.25rem; color: var(--text-dim); font-size: 0.9rem;">Difficulty:</label>
+                    <input type="number" id="roll-difficulty" class="input-field" value="12" min="1" max="30" style="width: 100%;">
+                </div>
+                
+                <div style="margin-bottom: 0.75rem;">
+                    <label for="roll-context" style="display: block; margin-bottom: 0.25rem; color: var(--text-dim); font-size: 0.9rem;">Context:</label>
+                    <input type="text" id="roll-context" class="input-field" placeholder="Leap across the chasm..." style="width: 100%;">
+                </div>
+                
+                <div style="margin-bottom: 0.75rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" id="roll-advantage">
+                        <span style="color: var(--text-light);">With Advantage</span>
+                    </label>
+                </div>
+                
+                <button id="request-roll-btn" class="btn-primary" style="width: 100%;">
+                    🎲 Request Roll
+                </button>
+                
+                <div id="roll-status-panel" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-medium); border-radius: 4px; display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>Roll in Progress</strong>
+                        <button id="cancel-roll-btn" class="btn-small" style="padding: 0.25rem 0.5rem;">✕</button>
+                    </div>
+                    <div>
+                        <p style="color: var(--hope-color); margin-bottom: 0.25rem;">✓ Completed:</p>
+                        <p id="completed-list" style="font-size: 0.9rem; margin-left: 1rem; color: var(--text-dim);">None</p>
+                    </div>
+                    <div style="margin-top: 0.5rem;">
+                        <p style="color: var(--fear-color); margin-bottom: 0.25rem;">⏳ Pending:</p>
+                        <p id="pending-list" style="font-size: 0.9rem; margin-left: 1rem; color: var(--text-dim);">None</p>
+                    </div>
+                </div>
+            </div>
         </aside>
         
         <!-- Main Area: Map View -->
@@ -160,8 +220,8 @@
         </aside>
     </div>
 
-    <script src="/static/js/websocket.js"></script>
-    <script src="/static/js/canvas.js"></script>
-    <script src="/static/js/gm.js"></script>
+    <script src="/static/js/websocket.js?v=3"></script>
+    <script src="/static/js/canvas.js?v=3"></script>
+    <script src="/static/js/gm.js?v=3"></script>
 </body>
 </html>

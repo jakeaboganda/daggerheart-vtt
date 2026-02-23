@@ -371,6 +371,15 @@ function handleServerMessage(message) {
         case 'roll_result':
             handleRollResult(payload);
             break;
+        case 'roll_requested':
+            handleRollRequested(payload);
+            break;
+        case 'detailed_roll_result':
+            handleDetailedRollResult(payload);
+            break;
+        case 'roll_request_status':
+            handleRollRequestStatus(payload);
+            break;
         case 'error':
             handleError(payload);
             break;
@@ -527,6 +536,113 @@ function handleRollResult(payload) {
     }
 }
 
+// Handle GM roll request
+let currentRollRequest = null;
+
+function handleRollRequested(payload) {
+    console.log('Roll requested:', payload);
+    
+    // Store the current request
+    currentRollRequest = payload;
+    
+    // Only show on mobile if this character is targeted
+    if (!window.location.pathname.includes('mobile')) {
+        return;
+    }
+    
+    const rollPanel = document.getElementById('roll-request-panel');
+    const rollBtn = document.getElementById('roll-btn');
+    
+    if (!rollPanel) return;
+    
+    // Populate the panel
+    document.getElementById('roll-context').textContent = payload.context || 'Roll requested';
+    
+    const attrName = payload.attribute ? payload.attribute.charAt(0).toUpperCase() + payload.attribute.slice(1) : 'None';
+    document.getElementById('roll-attribute').textContent = attrName;
+    document.getElementById('roll-difficulty').textContent = payload.difficulty;
+    document.getElementById('roll-modifier').textContent = `+${payload.total_modifier}`;
+    
+    // Show/hide advantage
+    const advantageInfo = document.getElementById('advantage-info');
+    if (payload.has_advantage) {
+        advantageInfo.style.display = 'flex';
+    } else {
+        advantageInfo.style.display = 'none';
+    }
+    
+    // Show/hide Hope spending option
+    const hopeLabel = document.getElementById('spend-hope-label');
+    if (payload.can_spend_hope) {
+        hopeLabel.style.display = 'flex';
+    } else {
+        hopeLabel.style.display = 'none';
+    }
+    
+    // Show panel, hide normal roll button
+    rollPanel.style.display = 'block';
+    if (rollBtn) rollBtn.style.display = 'none';
+    
+    // Set up execute button
+    const executeBtn = document.getElementById('execute-roll-btn');
+    if (executeBtn) {
+        executeBtn.onclick = () => executeRollRequest();
+    }
+}
+
+function executeRollRequest() {
+    if (!currentRollRequest) {
+        console.error('No roll request to execute');
+        return;
+    }
+    
+    const spendHopeCheckbox = document.getElementById('spend-hope-checkbox');
+    const spendHope = spendHopeCheckbox ? spendHopeCheckbox.checked : false;
+    
+    console.log('Executing roll request:', currentRollRequest.request_id, 'spend hope:', spendHope);
+    
+    ws.send('execute_roll', {
+        request_id: currentRollRequest.request_id,
+        spend_hope_for_bonus: spendHope,
+        chosen_experience: null, // TODO: Add experience selection UI
+    });
+    
+    // Hide the panel
+    const rollPanel = document.getElementById('roll-request-panel');
+    if (rollPanel) rollPanel.style.display = 'none';
+    
+    // Show normal roll button again
+    const rollBtn = document.getElementById('roll-btn');
+    if (rollBtn) rollBtn.style.display = 'block';
+    
+    // Clear the request
+    currentRollRequest = null;
+}
+
+function handleDetailedRollResult(payload) {
+    console.log('Detailed roll result:', payload);
+    
+    // Show on TV if not mobile
+    if (!window.location.pathname.includes('mobile')) {
+        showDetailedRollResultOnTV(payload);
+    }
+    
+    // If this is our roll, show feedback on mobile
+    if (payload.character_id === currentCharacterId) {
+        // Could show toast notification or result panel
+        console.log(`Your roll: ${payload.outcome_description}`);
+    }
+}
+
+function handleRollRequestStatus(payload) {
+    console.log('Roll request status:', payload);
+    
+    // Update TV display to show who has/hasn't rolled
+    if (!window.location.pathname.includes('mobile')) {
+        updateRollStatusOnTV(payload);
+    }
+}
+
 function handleError(payload) {
     const { message } = payload;
     console.error('Server error:', message);
@@ -679,3 +795,71 @@ async function loadQRCode() {
 
 // Global helper for character selection (called from HTML onclick)
 window.selectCharacter = selectCharacter;
+
+function showDetailedRollResultOnTV(result) {
+    const overlay = document.getElementById('roll-overlay');
+    if (!overlay) return;
+    
+    const roll = result.roll_details;
+    
+    // Update content
+    document.getElementById('roll-player').textContent = result.character_name;
+    document.getElementById('hope-value').textContent = roll.hope_die;
+    document.getElementById('fear-value').textContent = roll.fear_die;
+    document.getElementById('total-value').textContent = roll.total;
+    
+    // Update controlling die badge
+    const controllingBadge = document.getElementById('controlling-die');
+    controllingBadge.className = 'controlling-badge';
+    
+    if (roll.controlling_die === 'hope') {
+        controllingBadge.classList.add('hope');
+        controllingBadge.textContent = 'With Hope';
+    } else if (roll.controlling_die === 'fear') {
+        controllingBadge.classList.add('fear');
+        controllingBadge.textContent = 'With Fear';
+    } else {
+        controllingBadge.classList.add('tied');
+        controllingBadge.textContent = 'Tied';
+    }
+    
+    // Update success badge
+    const successBadge = document.getElementById('success-badge');
+    const successType = roll.success_type;
+    
+    if (successType === 'critical_success') {
+        successBadge.textContent = 'CRITICAL SUCCESS!';
+        successBadge.className = 'success-badge success critical';
+    } else if (successType === 'success_with_hope' || successType === 'success_with_fear') {
+        successBadge.textContent = 'SUCCESS';
+        successBadge.className = 'success-badge success';
+    } else {
+        successBadge.textContent = 'FAILURE';
+        successBadge.className = 'success-badge failure';
+    }
+    
+    // Show critical badge if applicable
+    const criticalBadge = document.getElementById('critical-badge');
+    if (roll.is_critical) {
+        criticalBadge.style.display = 'inline-block';
+    } else {
+        criticalBadge.style.display = 'none';
+    }
+    
+    // Show overlay
+    overlay.style.display = 'flex';
+    
+    // Hide after 6 seconds
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 6000);
+}
+
+function updateRollStatusOnTV(status) {
+    // TODO: Add a roll status panel to the TV view
+    console.log('Roll status update:', status);
+    console.log('Completed:', status.completed_characters);
+    console.log('Pending:', status.pending_characters);
+    
+    // For now, just log it - we can add a visual panel later
+}

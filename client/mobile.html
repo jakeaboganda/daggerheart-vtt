@@ -94,6 +94,40 @@
                     </div>
                 </div>
 
+                <!-- Roll Request Panel (shown when GM requests a roll) -->
+                <div class="roll-request-panel" id="roll-request-panel" style="display: none;">
+                    <div class="roll-request-header">
+                        <h3>🎲 Roll Requested!</h3>
+                    </div>
+                    <div class="roll-request-details">
+                        <p class="roll-context" id="roll-context">Context</p>
+                        <div class="roll-info">
+                            <span class="roll-label">Attribute:</span>
+                            <span id="roll-attribute">Agility</span>
+                        </div>
+                        <div class="roll-info">
+                            <span class="roll-label">Difficulty:</span>
+                            <span id="roll-difficulty" class="difficulty-value">12</span>
+                        </div>
+                        <div class="roll-info">
+                            <span class="roll-label">Your Modifier:</span>
+                            <span id="roll-modifier" class="modifier-value">+3</span>
+                        </div>
+                        <div class="roll-info" id="advantage-info" style="display: none;">
+                            <span class="roll-label">✨ Advantage</span>
+                        </div>
+                    </div>
+                    <div class="roll-request-actions">
+                        <button id="execute-roll-btn" class="btn-primary btn-large">
+                            🎲 Roll Now!
+                        </button>
+                        <label id="spend-hope-label" class="hope-spend-option" style="display: none;">
+                            <input type="checkbox" id="spend-hope-checkbox">
+                            <span>Spend Hope for +2 (Experience)</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="actions">
                     <button id="roll-btn" class="btn-primary btn-large">
                         🎲 Roll Duality Dice
@@ -124,9 +158,9 @@
         </main>
     </div>
 
-    <script src="/static/js/websocket.js?v=2"></script>
-    <script src="/static/js/canvas.js?v=2"></script>
-    <script src="/static/js/character.js?v=2"></script>
-    <script src="/static/js/app.js?v=2"></script>
+    <script src="/static/js/websocket.js?v=3"></script>
+    <script src="/static/js/canvas.js?v=3"></script>
+    <script src="/static/js/character.js?v=3"></script>
+    <script src="/static/js/app.js?v=3"></script>
 </body>
 </html>
