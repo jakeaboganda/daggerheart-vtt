@@ -191,6 +191,9 @@ function handleServerMessage(message) {
             console.log('Roll result:', payload);
             // Results are shown on TV view
             break;
+        case 'game_event':
+            handleGameEvent(payload);
+            break;
         default:
             console.log('GM received:', type, payload);
     }
@@ -199,6 +202,9 @@ function handleServerMessage(message) {
 function handleConnected(payload) {
     const { connection_id } = payload;
     console.log('✅ GM Connected with ID:', connection_id);
+    
+    // Load event history
+    loadEventHistory();
 }
 
 function handleCharactersList(payload) {
@@ -407,5 +413,74 @@ function updateTargetDropdown(chars) {
     // Restore selection if still valid
     if (currentValue && Array.from(dropdown.options).some(opt => opt.value === currentValue)) {
         dropdown.value = currentValue;
+    }
+}
+
+// Event Log Functions for GM
+function handleGameEvent(payload) {
+    addEventToLog(payload);
+}
+
+function addEventToLog(event) {
+    const eventLog = document.getElementById('event-log-gm');
+    if (!eventLog) return;
+    
+    // Remove empty state message
+    const emptyState = eventLog.querySelector('.empty-state');
+    if (emptyState) {
+        emptyState.remove();
+    }
+    
+    // Create event item
+    const item = document.createElement('div');
+    item.className = `event-item event-type-${event.event_type.toLowerCase().replace(/_/g, '-')}`;
+    
+    let html = `
+        <div>
+            <span class="event-timestamp">${event.timestamp}</span>
+            ${event.character_name ? `<span class="event-character">${event.character_name}:</span>` : ''}
+            <span class="event-message">${event.message}</span>
+        </div>
+    `;
+    
+    if (event.details) {
+        html += `<div class="event-details">${event.details}</div>`;
+    }
+    
+    item.innerHTML = html;
+    
+    // Add to log (newest at bottom)
+    eventLog.appendChild(item);
+    
+    // Keep only last 50 events in DOM
+    while (eventLog.children.length > 50) {
+        eventLog.removeChild(eventLog.firstChild);
+    }
+    
+    // Auto-scroll to bottom
+    eventLog.scrollTop = eventLog.scrollHeight;
+}
+
+// Load event history on connection
+async function loadEventHistory() {
+    try {
+        const response = await fetch('/api/events');
+        const data = await response.json();
+        
+        const eventLog = document.getElementById('event-log-gm');
+        if (!eventLog) return;
+        
+        // Clear existing
+        eventLog.innerHTML = '';
+        
+        if (data.events && data.events.length > 0) {
+            // Show last 30 events
+            const recentEvents = data.events.slice(-30);
+            recentEvents.forEach(event => addEventToLog(event));
+        } else {
+            eventLog.innerHTML = '<p class="empty-state">No events yet...</p>';
+        }
+    } catch (error) {
+        console.error('Failed to load event history:', error);
     }
 }

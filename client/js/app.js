@@ -380,6 +380,9 @@ function handleServerMessage(message) {
         case 'roll_request_status':
             handleRollRequestStatus(payload);
             break;
+        case 'game_event':
+            handleGameEvent(payload);
+            break;
         case 'error':
             handleError(payload);
             break;
@@ -417,6 +420,11 @@ function handleConnected(payload) {
         }
     } else {
         console.log('⚠️ Not showing character creation - mobile:', window.location.pathname.includes('mobile'), 'pendingPlayerName:', !!window.pendingPlayerName);
+    }
+    
+    // Load event history (for TV and GM views)
+    if (!window.location.pathname.includes('mobile')) {
+        loadEventHistory();
     }
 }
 
@@ -862,4 +870,73 @@ function updateRollStatusOnTV(status) {
     console.log('Pending:', status.pending_characters);
     
     // For now, just log it - we can add a visual panel later
+}
+
+// Event Log Functions
+function handleGameEvent(payload) {
+    addEventToLog(payload);
+}
+
+function addEventToLog(event) {
+    const eventLog = document.getElementById('event-log');
+    if (!eventLog) return;
+    
+    // Remove empty state message
+    const emptyState = eventLog.querySelector('.empty-state');
+    if (emptyState) {
+        emptyState.remove();
+    }
+    
+    // Create event item
+    const item = document.createElement('div');
+    item.className = `event-item event-type-${event.event_type.toLowerCase().replace(/_/g, '-')}`;
+    
+    let html = `
+        <div>
+            <span class="event-timestamp">${event.timestamp}</span>
+            ${event.character_name ? `<span class="event-character">${event.character_name}:</span>` : ''}
+            <span class="event-message">${event.message}</span>
+        </div>
+    `;
+    
+    if (event.details) {
+        html += `<div class="event-details">${event.details}</div>`;
+    }
+    
+    item.innerHTML = html;
+    
+    // Add to log (newest at bottom)
+    eventLog.appendChild(item);
+    
+    // Keep only last 50 events in DOM
+    while (eventLog.children.length > 50) {
+        eventLog.removeChild(eventLog.firstChild);
+    }
+    
+    // Auto-scroll to bottom
+    eventLog.scrollTop = eventLog.scrollHeight;
+}
+
+// Load event history on connection
+async function loadEventHistory() {
+    try {
+        const response = await fetch('/api/events');
+        const data = await response.json();
+        
+        const eventLog = document.getElementById('event-log');
+        if (!eventLog) return;
+        
+        // Clear existing
+        eventLog.innerHTML = '';
+        
+        if (data.events && data.events.length > 0) {
+            // Show last 30 events
+            const recentEvents = data.events.slice(-30);
+            recentEvents.forEach(event => addEventToLog(event));
+        } else {
+            eventLog.innerHTML = '<p class="empty-state">No events yet...</p>';
+        }
+    } catch (error) {
+        console.error('Failed to load event history:', error);
+    }
 }

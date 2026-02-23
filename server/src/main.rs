@@ -60,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/gm", get(routes::gm))
         .route("/api/qr-code", get(routes::qr_code))
         .route("/api/game-state", get(routes::game_state))
+        .route("/api/events", get(routes::events))
         .route("/api/save", axum::routing::post(routes::save_game))
         .route("/api/saves", get(routes::list_saves))
         .route("/api/load", axum::routing::post(routes::load_game))

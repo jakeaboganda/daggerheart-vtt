@@ -251,6 +251,16 @@ async fn handle_create_character(
     let char_id = character.id;
 
     println!("✨ Character created: {} ({})", character.name, char_id);
+    
+    // Log event
+    game.add_event(
+        game::GameEventType::CharacterCreated,
+        format!("{} joined the game", character.name),
+        Some(character.name.clone()),
+        Some(format!("Class: {}, Ancestry: {}", class_str, ancestry_str)),
+    );
+    
+    let event = game.event_log.last().cloned();
 
     // Auto-select the newly created character
     if let Err(e) = game.select_character(conn_id, &char_id) {
@@ -262,6 +272,11 @@ async fn handle_create_character(
 
     let character_data = character.to_data();
     drop(game);
+    
+    // Broadcast event
+    if let Some(ev) = event {
+        broadcast_event(state, &ev).await;
+    }
 
     // Broadcast character spawned
     let spawn_msg = ServerMessage::CharacterSpawned {
@@ -487,6 +502,32 @@ async fn send_error(state: &AppState, message: &str) {
     let _ = state.broadcaster.send(msg.to_json());
 }
 
+/// Broadcast a game event to all clients
+async fn broadcast_event(state: &AppState, event: &game::GameEvent) {
+    use std::time::UNIX_EPOCH;
+    
+    let timestamp = event.timestamp
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    
+    let timestamp_str = chrono::DateTime::from_timestamp(timestamp as i64, 0)
+        .map(|dt| dt.format("%H:%M:%S").to_string())
+        .unwrap_or_else(|| "??:??:??".to_string());
+    
+    let event_type_str = format!("{:?}", event.event_type);
+    
+    let msg = protocol::ServerMessage::GameEvent {
+        timestamp: timestamp_str,
+        event_type: event_type_str,
+        message: event.message.clone(),
+        character_name: event.character_name.clone(),
+        details: event.details.clone(),
+    };
+    
+    let _ = state.broadcaster.send(msg.to_json());
+}
+
 /// Send characters list to a specific connection
 async fn send_characters_list(
     state: &AppState,
@@ -608,6 +649,27 @@ async fn handle_request_roll(
 
     game.pending_roll_requests
         .insert(request_id.clone(), request);
+    
+    // Log event
+    let target_names: Vec<String> = target_uuids
+        .iter()
+        .filter_map(|id| game.characters.get(id).map(|c| c.name.clone()))
+        .collect();
+    let target_desc = if target_names.len() == game.get_player_characters().len() {
+        "all players".to_string()
+    } else {
+        target_names.join(", ")
+    };
+    
+    game.add_event(
+        game::GameEventType::RollRequested,
+        format!("GM requested {} roll: \"{}\"", 
+            attribute.as_deref().unwrap_or("general"),
+            context
+        ),
+        None,
+        Some(format!("Target: {}, DC {}", target_desc, difficulty)),
+    );
 
     // Send roll request to each targeted character
     for char_id in &target_uuids {
@@ -724,6 +786,27 @@ async fn handle_execute_roll(
         protocol::SuccessType::SuccessWithFear => "SUCCESS WITH FEAR".to_string(),
         protocol::SuccessType::Failure => "FAILURE".to_string(),
     };
+    
+    // Log event
+    let roll_message = format!(
+        "{} rolled {} for \"{}\"",
+        character_name,
+        outcome_description.to_lowercase(),
+        context
+    );
+    let roll_details = format!(
+        "Hope: {}, Fear: {}, Total: {}",
+        roll_result.hope_die,
+        roll_result.fear_die,
+        roll_result.total
+    );
+    game.add_event(
+        game::GameEventType::RollExecuted,
+        roll_message,
+        Some(character_name.clone()),
+        Some(roll_details),
+    );
+    let event = game.event_log.last().cloned();
 
     // Broadcast result to all clients
     let msg = protocol::ServerMessage::DetailedRollResult {
@@ -771,6 +854,13 @@ async fn handle_execute_roll(
             character: character.to_data(),
         };
         state.broadcaster.send(msg.to_json()).ok();
+    }
+    
+    drop(game);
+    
+    // Broadcast event
+    if let Some(ev) = event {
+        broadcast_event(state, &ev).await;
     }
 }
 

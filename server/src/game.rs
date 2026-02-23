@@ -5,7 +5,7 @@
 //! - Character: Persistent game entity (survives restarts, can be controlled by any connection)
 //! - Control mapping: Connection → Character relationship
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -20,6 +20,28 @@ use daggerheart_engine::{
 use crate::protocol::{
     AttributesData, CharacterData, Position, ResourceData, RollResult, RollTargetType, RollType,
 };
+
+/// Game event for the event log
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameEvent {
+    pub timestamp: std::time::SystemTime,
+    pub event_type: GameEventType,
+    pub message: String,
+    pub character_name: Option<String>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameEventType {
+    CharacterCreated,
+    CharacterMoved,
+    RollRequested,
+    RollExecuted,
+    ResourceUpdate,
+    CombatAction,
+    SystemMessage,
+}
 
 /// Map dimensions
 pub const MAP_WIDTH: f32 = 800.0;
@@ -284,6 +306,9 @@ pub struct GameState {
 
     /// Phase 1: GM Fear pool
     pub fear_pool: u8,
+    
+    /// Game event log
+    pub event_log: Vec<GameEvent>,
 }
 
 impl GameState {
@@ -295,6 +320,7 @@ impl GameState {
             color_index: 0,
             pending_roll_requests: HashMap::new(),
             fear_pool: 5, // Starting Fear pool
+            event_log: Vec::new(),
         }
     }
 
@@ -457,6 +483,45 @@ impl GameState {
         for character in self.characters.values_mut() {
             character.restore_resources();
         }
+    }
+    
+    // ===== Event Log System =====
+    
+    /// Add an event to the game log
+    pub fn add_event(&mut self, event_type: GameEventType, message: String, character_name: Option<String>, details: Option<String>) {
+        let event = GameEvent {
+            timestamp: std::time::SystemTime::now(),
+            event_type,
+            message,
+            character_name,
+            details,
+        };
+        self.event_log.push(event);
+        
+        // Keep log size reasonable (last 500 events)
+        if self.event_log.len() > 500 {
+            self.event_log.drain(0..100); // Remove oldest 100
+        }
+    }
+    
+    /// Get recent events (last N)
+    pub fn get_recent_events(&self, count: usize) -> Vec<GameEvent> {
+        let total = self.event_log.len();
+        if total <= count {
+            self.event_log.clone()
+        } else {
+            self.event_log[total - count..].to_vec()
+        }
+    }
+    
+    /// Get all events
+    pub fn get_all_events(&self) -> &[GameEvent] {
+        &self.event_log
+    }
+    
+    /// Clear event log
+    pub fn clear_events(&mut self) {
+        self.event_log.clear();
     }
 
     // ===== Phase 1: GM-Initiated Dice Rolls =====

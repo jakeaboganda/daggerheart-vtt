@@ -910,3 +910,98 @@ body.mobile .character-sheet {
     color: var(--hope-color);
     font-weight: bold;
 }
+
+/* Event Log Styling */
+.event-log-panel {
+    background: var(--bg-dark);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.event-log-panel h2 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.1rem;
+    color: var(--text-light);
+}
+
+.event-log-content {
+    max-height: 250px;
+    overflow-y: auto;
+    background: var(--bg-medium);
+    border-radius: 4px;
+    padding: 0.5rem;
+}
+
+.event-log-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.event-log-content::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+    border-radius: 4px;
+}
+
+.event-log-content::-webkit-scrollbar-thumb {
+    background: var(--accent);
+    border-radius: 4px;
+}
+
+.event-log-content::-webkit-scrollbar-thumb:hover {
+    background: var(--hope-color);
+}
+
+.event-item {
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-dark);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent);
+    font-size: 0.9rem;
+}
+
+.event-item:last-child {
+    margin-bottom: 0;
+}
+
+.event-timestamp {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin-right: 0.5rem;
+}
+
+.event-character {
+    color: var(--hope-color);
+    font-weight: bold;
+}
+
+.event-message {
+    color: var(--text-light);
+}
+
+.event-details {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    font-style: italic;
+}
+
+.event-type-character-created {
+    border-left-color: var(--hope-color);
+}
+
+.event-type-roll-executed {
+    border-left-color: var(--accent);
+}
+
+.event-type-roll-requested {
+    border-left-color: var(--fear-color);
+}
+
+.event-type-resource-update {
+    border-left-color: #4CAF50;
+}
+
+.event-type-system-message {
+    border-left-color: var(--text-dim);
+}

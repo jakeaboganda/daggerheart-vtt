@@ -309,10 +309,36 @@ pub enum ServerMessage {
         pending_characters: Vec<String>,
         completed_characters: Vec<String>,
     },
+    
+    /// Game event (for event log)
+    #[serde(rename = "game_event")]
+    GameEvent {
+        timestamp: String,
+        event_type: String,
+        message: String,
+        character_name: Option<String>,
+        details: Option<String>,
+    },
+    
+    /// Event log history
+    #[serde(rename = "event_log")]
+    EventLog {
+        events: Vec<GameEventData>,
+    },
 
     /// Error message
     #[serde(rename = "error")]
     Error { message: String },
+}
+
+/// Game event data for serialization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameEventData {
+    pub timestamp: String,
+    pub event_type: String,
+    pub message: String,
+    pub character_name: Option<String>,
+    pub details: Option<String>,
 }
 
 impl ServerMessage {

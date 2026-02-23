@@ -84,6 +84,39 @@ pub async fn game_state(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+/// Get event log
+pub async fn events(State(state): State<AppState>) -> impl IntoResponse {
+    use std::time::UNIX_EPOCH;
+    
+    let game = state.game.read().await;
+    let events: Vec<serde_json::Value> = game.get_all_events()
+        .iter()
+        .map(|event| {
+            let timestamp = event.timestamp
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            let timestamp_str = chrono::DateTime::from_timestamp(timestamp as i64, 0)
+                .map(|dt| dt.format("%H:%M:%S").to_string())
+                .unwrap_or_else(|| "??:??:??".to_string());
+            
+            json!({
+                "timestamp": timestamp_str,
+                "event_type": format!("{:?}", event.event_type),
+                "message": event.message,
+                "character_name": event.character_name,
+                "details": event.details,
+            })
+        })
+        .collect();
+    
+    Json(json!({
+        "events": events,
+        "count": events.len()
+    }))
+}
+
 /// GM view - serve gm.html
 pub async fn gm() -> Html<String> {
     let html = std::fs::read_to_string("../client/gm.html")
