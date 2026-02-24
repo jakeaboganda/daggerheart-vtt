@@ -1005,3 +1005,112 @@ body.mobile .character-sheet {
 .event-type-system-message {
     border-left-color: var(--text-dim);
 }
+
+/* Adversary List Styling */
+.adversary-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-dark);
+    border-radius: 4px;
+    border-left: 4px solid var(--fear-color);
+}
+
+.adversary-item h5 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.adversary-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.adversary-stat {
+    color: var(--text-dim);
+}
+
+.adversary-stat strong {
+    color: var(--text-light);
+}
+
+.adversary-actions {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+}
+
+.adversary-actions button {
+    flex: 1;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.btn-danger {
+    background: var(--fear-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+    transform: translateY(-2px);
+}
+
+/* Combat Controls */
+.combat-active-indicator {
+    background: rgba(231, 76, 60, 0.2);
+    border: 1px solid var(--fear-color);
+    padding: 0.5rem;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: bold;
+    color: var(--fear-color);
+    margin-bottom: 0.5rem;
+}
+
+.action-tracker-display {
+    background: var(--bg-dark);
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin-bottom: 0.75rem;
+}
+
+.tracker-tokens {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+}
+
+.tracker-token {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.tracker-token.pc {
+    background: var(--hope-color);
+    color: white;
+}
+
+.tracker-token.adversary {
+    background: var(--fear-color);
+    color: white;
+}
+
+.tracker-token.next {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    transform: scale(1.2);
+}

@@ -194,6 +194,24 @@ function handleServerMessage(message) {
         case 'game_event':
             handleGameEvent(payload);
             break;
+        case 'adversary_spawned':
+            handleAdversarySpawned(payload);
+            break;
+        case 'adversary_removed':
+            handleAdversaryRemoved(payload);
+            break;
+        case 'adversary_updated':
+            handleAdversaryUpdated(payload);
+            break;
+        case 'combat_started':
+            handleCombatStarted(payload);
+            break;
+        case 'combat_ended':
+            handleCombatEnded(payload);
+            break;
+        case 'tracker_updated':
+            handleTrackerUpdated(payload);
+            break;
         default:
             console.log('GM received:', type, payload);
     }
@@ -483,4 +501,289 @@ async function loadEventHistory() {
     } catch (error) {
         console.error('Failed to load event history:', error);
     }
+}
+
+// ===== Adversary Management =====
+
+let adversaries = [];
+let spawnMode = false;
+
+// Add adversary event listeners to setupEventListeners
+(function() {
+    const originalSetup = setupEventListeners;
+    setupEventListeners = function() {
+        originalSetup();
+        
+        // Adversary template selector
+        document.getElementById('adversary-template').addEventListener('change', (e) => {
+            const customPanel = document.getElementById('custom-adversary-panel');
+            if (e.target.value === 'custom') {
+                customPanel.style.display = 'block';
+            } else {
+                customPanel.style.display = 'none';
+            }
+        });
+        
+        // Spawn adversary button
+        document.getElementById('spawn-adversary-btn').addEventListener('click', () => {
+            spawnMode = !spawnMode;
+            const btn = document.getElementById('spawn-adversary-btn');
+            if (spawnMode) {
+                btn.textContent = '❌ Cancel Spawn';
+                btn.style.background = 'var(--fear-color)';
+                console.log('🎯 Click map to spawn adversary');
+            } else {
+                btn.textContent = '➕ Click Map to Spawn';
+                btn.style.background = '';
+                console.log('Spawn mode cancelled');
+            }
+        });
+        
+        // Combat controls
+        document.getElementById('start-combat-btn').addEventListener('click', startCombat);
+        document.getElementById('end-combat-btn').addEventListener('click', endCombat);
+        document.getElementById('add-pc-token').addEventListener('click', () => addTrackerToken('pc'));
+        document.getElementById('add-adv-token').addEventListener('click', () => addTrackerToken('adversary'));
+        document.getElementById('reset-tracker').addEventListener('click', resetTracker);
+    };
+})();
+
+// Handle canvas click for spawning
+(function() {
+    const originalHandleCanvasClick = window.handleCanvasClick || function() {};
+    window.handleCanvasClick = function(x, y) {
+        if (spawnMode) {
+            spawnAdversaryAtPosition(x, y);
+            spawnMode = false;
+            const btn = document.getElementById('spawn-adversary-btn');
+            btn.textContent = '➕ Click Map to Spawn';
+            btn.style.background = '';
+        } else {
+            originalHandleCanvasClick(x, y);
+        }
+    };
+})();
+
+function spawnAdversaryAtPosition(x, y) {
+    const template = document.getElementById('adversary-template').value;
+    
+    if (template === 'custom') {
+        // Spawn custom adversary
+        const name = document.getElementById('adv-name').value;
+        const hp = parseInt(document.getElementById('adv-hp').value);
+        const evasion = parseInt(document.getElementById('adv-evasion').value);
+        const armor = parseInt(document.getElementById('adv-armor').value);
+        const attackMod = parseInt(document.getElementById('adv-attack-mod').value);
+        const damage = document.getElementById('adv-damage').value;
+        
+        ws.send({
+            type: 'spawn_custom_adversary',
+            name,
+            position: { x, y },
+            hp,
+            evasion,
+            armor,
+            attack_modifier: attackMod,
+            damage_dice: damage
+        });
+        
+        console.log(`🎯 Spawning custom adversary "${name}" at (${x}, ${y})`);
+    } else {
+        // Spawn from template
+        ws.send({
+            type: 'spawn_adversary',
+            template,
+            position: { x, y }
+        });
+        
+        console.log(`🎯 Spawning ${template} at (${x}, ${y})`);
+    }
+}
+
+function handleAdversarySpawned(payload) {
+    const {
+        adversary_id,
+        name,
+        template,
+        position,
+        hp,
+        max_hp,
+        evasion,
+        armor,
+        attack_modifier,
+        damage_dice
+    } = payload;
+    
+    // Add to local list
+    adversaries.push({
+        id: adversary_id,
+        name,
+        template,
+        position,
+        hp,
+        max_hp,
+        evasion,
+        armor,
+        attack_modifier,
+        damage_dice,
+        is_active: true
+    });
+    
+    // Render on canvas
+    if (mapCanvas) {
+        mapCanvas.drawAdversary(adversary_id, name, position.x, position.y);
+    }
+    
+    // Update adversary list
+    renderAdversariesList();
+    
+    console.log(`👹 Adversary spawned: ${name} (${adversary_id})`);
+}
+
+function handleAdversaryRemoved(payload) {
+    const { adversary_id, name } = payload;
+    
+    // Remove from local list
+    adversaries = adversaries.filter(adv => adv.id !== adversary_id);
+    
+    // Remove from canvas
+    if (mapCanvas) {
+        mapCanvas.removeAdversary(adversary_id);
+    }
+    
+    // Update list
+    renderAdversariesList();
+    
+    console.log(`💀 Adversary removed: ${name}`);
+}
+
+function handleAdversaryUpdated(payload) {
+    const { adversary_id, hp, stress, is_active } = payload;
+    
+    // Update local list
+    const adversary = adversaries.find(adv => adv.id === adversary_id);
+    if (adversary) {
+        adversary.hp = hp;
+        adversary.stress = stress;
+        adversary.is_active = is_active;
+        
+        // Update display
+        renderAdversariesList();
+        
+        // Update canvas (maybe show HP bar?)
+        if (mapCanvas) {
+            mapCanvas.updateAdversaryHP(adversary_id, hp, adversary.max_hp);
+        }
+    }
+}
+
+function renderAdversariesList() {
+    const listEl = document.getElementById('adversaries-list');
+    
+    if (adversaries.length === 0) {
+        listEl.innerHTML = '<p class="empty-state">No adversaries spawned</p>';
+        return;
+    }
+    
+    let html = '';
+    adversaries.forEach(adv => {
+        const hpPercent = (adv.hp / adv.max_hp) * 100;
+        const statusIcon = adv.is_active ? '🗡️' : '💀';
+        
+        html += `
+            <div class="adversary-item" data-id="${adv.id}">
+                <h5>
+                    ${statusIcon} ${adv.name}
+                    <button onclick="removeAdversary('${adv.id}')" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background: var(--fear-color); color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️</button>
+                </h5>
+                <div class="adversary-stats">
+                    <div class="adversary-stat">HP: <strong>${adv.hp}/${adv.max_hp}</strong></div>
+                    <div class="adversary-stat">Stress: <strong>${adv.stress || 0}/${adv.max_hp}</strong></div>
+                    <div class="adversary-stat">Evasion: <strong>${adv.evasion}</strong></div>
+                    <div class="adversary-stat">Armor: <strong>${adv.armor}</strong></div>
+                </div>
+                <div style="background: var(--bg-dark); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 0.5rem;">
+                    <div style="height: 100%; background: var(--hope-color); width: ${hpPercent}%;"></div>
+                </div>
+            </div>
+        `;
+    });
+    
+    listEl.innerHTML = html;
+}
+
+function removeAdversary(adversaryId) {
+    if (confirm('Remove this adversary?')) {
+        ws.send({
+            type: 'remove_adversary',
+            adversary_id: adversaryId
+        });
+    }
+}
+
+// ===== Combat Management =====
+
+let combatActive = false;
+
+function startCombat() {
+    ws.send({ type: 'start_combat' });
+    console.log('▶️ Starting combat...');
+}
+
+function endCombat() {
+    if (confirm('End combat encounter?')) {
+        ws.send({ type: 'end_combat' });
+        console.log('🛑 Ending combat...');
+    }
+}
+
+function handleCombatStarted(payload) {
+    const { encounter_id, pc_tokens, adversary_tokens } = payload;
+    
+    combatActive = true;
+    
+    // Show combat controls
+    document.getElementById('start-combat-btn').style.display = 'none';
+    document.getElementById('end-combat-btn').style.display = 'block';
+    document.getElementById('combat-controls').style.display = 'block';
+    
+    // Update tracker display
+    document.getElementById('pc-tokens').textContent = pc_tokens;
+    document.getElementById('adv-tokens').textContent = adversary_tokens;
+    
+    console.log(`⚔️ Combat started! Encounter: ${encounter_id}`);
+}
+
+function handleCombatEnded(payload) {
+    const { reason } = payload;
+    
+    combatActive = false;
+    
+    // Hide combat controls
+    document.getElementById('start-combat-btn').style.display = 'block';
+    document.getElementById('end-combat-btn').style.display = 'none';
+    document.getElementById('combat-controls').style.display = 'none';
+    
+    console.log(`✅ Combat ended: ${reason}`);
+}
+
+function handleTrackerUpdated(payload) {
+    const { pc_tokens, adversary_tokens, next_token } = payload;
+    
+    document.getElementById('pc-tokens').textContent = pc_tokens;
+    document.getElementById('adv-tokens').textContent = adversary_tokens;
+    
+    console.log(`🎲 Tracker updated: PC ${pc_tokens}, Adversary ${adversary_tokens}, Next: ${next_token}`);
+}
+
+function addTrackerToken(tokenType) {
+    ws.send({
+        type: 'add_tracker_token',
+        token_type: tokenType
+    });
+}
+
+function resetTracker() {
+    // TODO: Implement reset tracker
+    console.log('Reset tracker not yet implemented');
 }

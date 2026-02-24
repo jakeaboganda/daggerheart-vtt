@@ -114,6 +114,9 @@ class MapCanvas {
             
             this.drawPlayer(player);
         }
+        
+        // Draw adversaries
+        this.renderAdversaries();
     }
     
     drawGrid() {
@@ -185,5 +188,103 @@ class MapCanvas {
             x: (event.clientX - rect.left) * scaleX,
             y: (event.clientY - rect.top) * scaleY
         };
+    }
+
+    // ===== Adversary Rendering =====
+    
+    drawAdversary(id, name, x, y) {
+        // Store adversary position for later rendering
+        if (!this.adversaryPositions) {
+            this.adversaryPositions = new Map();
+        }
+        
+        this.adversaryPositions.set(id, { name, x, y, hp: null, maxHp: null });
+        this.render();
+    }
+    
+    removeAdversary(id) {
+        if (this.adversaryPositions) {
+            this.adversaryPositions.delete(id);
+            this.render();
+        }
+    }
+    
+    updateAdversaryHP(id, hp, maxHp) {
+        if (this.adversaryPositions && this.adversaryPositions.has(id)) {
+            const adv = this.adversaryPositions.get(id);
+            adv.hp = hp;
+            adv.maxHp = maxHp;
+            this.render();
+        }
+    }
+    
+    drawAdversaryToken(name, x, y, hp, maxHp) {
+        const ADVERSARY_RADIUS = 20;
+        
+        // Draw red glow
+        this.ctx.shadowBlur = 15;
+        this.ctx.shadowColor = '#e74c3c';
+        
+        // Draw circle (red/purple for adversaries)
+        this.ctx.fillStyle = hp !== null && hp === 0 ? '#7f8c8d' : '#e74c3c';
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, ADVERSARY_RADIUS, 0, Math.PI * 2);
+        this.ctx.fill();
+        
+        // Draw skull icon
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 16px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('💀', x, y);
+        
+        // Draw border
+        this.ctx.strokeStyle = '#ffffff';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+        
+        // Draw name label
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 14px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'bottom';
+        
+        // Text shadow for readability
+        this.ctx.shadowColor = '#000000';
+        this.ctx.shadowBlur = 4;
+        
+        this.ctx.fillText(name, x, y - ADVERSARY_RADIUS - 5);
+        
+        // Draw HP bar if available
+        if (hp !== null && maxHp !== null) {
+            const barWidth = 40;
+            const barHeight = 4;
+            const barX = x - barWidth / 2;
+            const barY = y + ADVERSARY_RADIUS + 5;
+            
+            // Background
+            this.ctx.fillStyle = '#2c3e50';
+            this.ctx.fillRect(barX, barY, barWidth, barHeight);
+            
+            // HP fill
+            const hpPercent = hp / maxHp;
+            this.ctx.fillStyle = hpPercent > 0.5 ? '#2ecc71' : hpPercent > 0.25 ? '#f39c12' : '#e74c3c';
+            this.ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+        }
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+    }
+    
+    // Override render to include adversaries
+    renderAdversaries() {
+        if (this.adversaryPositions) {
+            this.adversaryPositions.forEach((adv, id) => {
+                this.drawAdversaryToken(adv.name, adv.x, adv.y, adv.hp, adv.maxHp);
+            });
+        }
     }
 }

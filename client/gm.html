@@ -201,6 +201,92 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Adversary Management Panel -->
+            <div class="control-panel" style="margin-top: 1.5rem;">
+                <h3>👹 Adversaries</h3>
+                
+                <label for="adversary-template">Template:</label>
+                <select id="adversary-template" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; background: var(--bg-medium); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                    <option value="goblin">Goblin (HP: 3, Evasion: 10)</option>
+                    <option value="bandit">Bandit (HP: 4, Evasion: 11)</option>
+                    <option value="wolf">Wolf (HP: 3, Evasion: 12)</option>
+                    <option value="orc_warrior">Orc Warrior (HP: 5, Evasion: 10)</option>
+                    <option value="shadow_beast">Shadow Beast (HP: 4, Evasion: 13)</option>
+                    <option value="ogre">Ogre (HP: 8, Evasion: 9)</option>
+                    <option value="dragon_wyrmling">Dragon Wyrmling (HP: 10, Evasion: 12)</option>
+                    <option value="custom">Custom...</option>
+                </select>
+                
+                <button id="spawn-adversary-btn" class="btn-primary" style="width: 100%; margin-bottom: 0.75rem;">
+                    ➕ Click Map to Spawn
+                </button>
+                
+                <!-- Custom Adversary Panel (hidden by default) -->
+                <div id="custom-adversary-panel" style="display: none; background: var(--bg-medium); padding: 0.75rem; border-radius: 4px; margin-bottom: 0.75rem;">
+                    <h4 style="margin-top: 0;">Custom Enemy</h4>
+                    
+                    <label style="display: block; margin-bottom: 0.25rem;">Name:</label>
+                    <input type="text" id="adv-name" value="Custom Enemy" style="width: 100%; padding: 0.25rem; margin-bottom: 0.5rem; background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">HP:</label>
+                            <input type="number" id="adv-hp" value="3" min="1" max="50" style="width: 100%; padding: 0.25rem; background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Evasion:</label>
+                            <input type="number" id="adv-evasion" value="10" min="5" max="20" style="width: 100%; padding: 0.25rem; background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Armor:</label>
+                            <input type="number" id="adv-armor" value="1" min="0" max="10" style="width: 100%; padding: 0.25rem; background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Attack Mod:</label>
+                            <input type="number" id="adv-attack-mod" value="1" min="-5" max="10" style="width: 100%; padding: 0.25rem; background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                        </div>
+                    </div>
+                    
+                    <label style="display: block; font-size: 0.85rem; margin-bottom: 0.25rem;">Damage Dice:</label>
+                    <input type="text" id="adv-damage" value="1d6" placeholder="e.g., 1d8+2" style="width: 100%; padding: 0.25rem; margin-bottom: 0.5rem; background: var(--bg-dark); color: var(--text-light); border: 1px solid var(--accent); border-radius: 4px;">
+                </div>
+                
+                <h4>Active Adversaries</h4>
+                <div id="adversaries-list" style="max-height: 200px; overflow-y: auto; background: var(--bg-medium); border-radius: 4px; padding: 0.5rem;">
+                    <p class="empty-state">No adversaries spawned</p>
+                </div>
+            </div>
+
+            <!-- Combat Control Panel -->
+            <div class="control-panel" style="margin-top: 1.5rem;">
+                <h3>⚔️ Combat</h3>
+                
+                <button id="start-combat-btn" class="btn-primary" style="width: 100%; margin-bottom: 0.5rem;">
+                    ▶️ Start Combat
+                </button>
+                <button id="end-combat-btn" class="btn-danger" style="width: 100%; display: none;">
+                    🛑 End Combat
+                </button>
+                
+                <div id="combat-controls" style="display: none; margin-top: 1rem; padding: 0.75rem; background: var(--bg-medium); border-radius: 4px;">
+                    <h4 style="margin-top: 0;">Action Tracker</h4>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span>PC Tokens: <strong id="pc-tokens">3</strong></span>
+                        <span>Adversary: <strong id="adv-tokens">3</strong></span>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <button id="add-pc-token" class="btn-small">+ PC</button>
+                        <button id="add-adv-token" class="btn-small">+ Adversary</button>
+                    </div>
+                    
+                    <button id="reset-tracker" class="btn-small" style="width: 100%;">Reset Tracker</button>
+                </div>
+            </div>
         </aside>
         
         <!-- Main Area: Map View -->
@@ -227,8 +313,8 @@
         </aside>
     </div>
 
-    <script src="/static/js/websocket.js?v=4"></script>
-    <script src="/static/js/canvas.js?v=4"></script>
-    <script src="/static/js/gm.js?v=4"></script>
+    <script src="/static/js/websocket.js?v=5"></script>
+    <script src="/static/js/canvas.js?v=5"></script>
+    <script src="/static/js/gm.js?v=5"></script>
 </body>
 </html>
