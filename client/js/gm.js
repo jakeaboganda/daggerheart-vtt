@@ -593,8 +593,7 @@ function spawnAdversaryAtPosition(x, y) {
         const attackMod = parseInt(document.getElementById('adv-attack-mod').value);
         const damage = document.getElementById('adv-damage').value;
         
-        ws.send({
-            type: 'spawn_custom_adversary',
+        ws.send('spawn_custom_adversary', {
             name,
             position: { x, y },
             hp,
@@ -607,8 +606,7 @@ function spawnAdversaryAtPosition(x, y) {
         console.log(`🎯 Spawning custom adversary "${name}" at (${x}, ${y})`);
     } else {
         // Spawn from template
-        ws.send({
-            type: 'spawn_adversary',
+        ws.send('spawn_adversary', {
             template,
             position: { x, y }
         });
@@ -731,8 +729,7 @@ function renderAdversariesList() {
 
 function removeAdversary(adversaryId) {
     if (confirm('Remove this adversary?')) {
-        ws.send({
-            type: 'remove_adversary',
+        ws.send('remove_adversary', {
             adversary_id: adversaryId
         });
     }
@@ -743,13 +740,13 @@ function removeAdversary(adversaryId) {
 let combatActive = false;
 
 function startCombat() {
-    ws.send({ type: 'start_combat' });
+    ws.send('start_combat');
     console.log('▶️ Starting combat...');
 }
 
 function endCombat() {
     if (confirm('End combat encounter?')) {
-        ws.send({ type: 'end_combat' });
+        ws.send('end_combat');
         console.log('🛑 Ending combat...');
     }
 }
@@ -794,8 +791,7 @@ function handleTrackerUpdated(payload) {
 }
 
 function addTrackerToken(tokenType) {
-    ws.send({
-        type: 'add_tracker_token',
+    ws.send('add_tracker_token', {
         token_type: tokenType
     });
 }
