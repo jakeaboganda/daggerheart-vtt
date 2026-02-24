@@ -1,6 +1,7 @@
 // Daggerheart VTT Server
 // Phase 4: Save/Load & GM Controls
 
+mod adversaries;
 mod game;
 mod protocol;
 mod routes;

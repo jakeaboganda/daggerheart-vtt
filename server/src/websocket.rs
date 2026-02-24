@@ -186,6 +186,68 @@ async fn handle_client_message(state: &AppState, conn_id: &Uuid, text: &str) {
             )
             .await;
         }
+
+        // ===== Combat & Adversary Handlers =====
+        
+        ClientMessage::SpawnAdversary { template, position } => {
+            handle_spawn_adversary(state, template, position).await;
+        }
+
+        ClientMessage::SpawnCustomAdversary {
+            name,
+            position,
+            hp,
+            evasion,
+            armor,
+            attack_modifier,
+            damage_dice,
+        } => {
+            handle_spawn_custom_adversary(
+                state,
+                name,
+                position,
+                hp,
+                evasion,
+                armor,
+                attack_modifier,
+                damage_dice,
+            )
+            .await;
+        }
+
+        ClientMessage::RemoveAdversary { adversary_id } => {
+            handle_remove_adversary(state, adversary_id).await;
+        }
+
+        ClientMessage::StartCombat => {
+            handle_start_combat(state).await;
+        }
+
+        ClientMessage::EndCombat => {
+            handle_end_combat(state).await;
+        }
+
+        ClientMessage::AddTrackerToken { token_type } => {
+            handle_add_tracker_token(state, token_type).await;
+        }
+
+        ClientMessage::Attack {
+            attacker_id,
+            target_id,
+            modifier,
+            with_advantage,
+        } => {
+            handle_attack(state, attacker_id, target_id, modifier, with_advantage).await;
+        }
+
+        ClientMessage::RollDamage {
+            attacker_id,
+            target_id,
+            damage_dice,
+            armor,
+        } => {
+            handle_roll_damage(state, attacker_id, target_id, damage_dice, armor).await;
+        }
     }
 }
 
@@ -861,6 +923,366 @@ async fn handle_execute_roll(
     // Broadcast event
     if let Some(ev) = event {
         broadcast_event(state, &ev).await;
+    }
+}
+
+// ===== Combat & Adversary Handlers =====
+
+/// Handle spawning an adversary from template
+async fn handle_spawn_adversary(state: &AppState, template: String, position: protocol::Position) {
+    let mut game = state.game.write().await;
+    
+    match game.spawn_adversary(&template, position) {
+        Ok(adversary) => {
+            // Broadcast adversary spawned
+            let msg = ServerMessage::AdversarySpawned {
+                adversary_id: adversary.id.clone(),
+                name: adversary.name.clone(),
+                template: adversary.template.clone(),
+                position,
+                hp: adversary.hp,
+                max_hp: adversary.max_hp,
+                evasion: adversary.evasion,
+                armor: adversary.armor,
+                attack_modifier: adversary.attack_modifier,
+                damage_dice: adversary.damage_dice.clone(),
+            };
+            let _ = state.broadcaster.send(msg.to_json());
+            
+            // Broadcast event
+            if let Some(event) = game.event_log.last() {
+                broadcast_event(state, event).await;
+            }
+        }
+        Err(e) => {
+            send_error(state, &e).await;
+        }
+    }
+}
+
+/// Handle spawning a custom adversary
+async fn handle_spawn_custom_adversary(
+    state: &AppState,
+    name: String,
+    position: protocol::Position,
+    hp: u8,
+    evasion: u8,
+    armor: u8,
+    attack_modifier: i8,
+    damage_dice: String,
+) {
+    let mut game = state.game.write().await;
+    
+    let adversary = game.create_custom_adversary(
+        name,
+        position,
+        hp,
+        evasion,
+        armor,
+        attack_modifier,
+        damage_dice.clone(),
+    );
+    
+    // Broadcast adversary spawned
+    let msg = ServerMessage::AdversarySpawned {
+        adversary_id: adversary.id.clone(),
+        name: adversary.name.clone(),
+        template: adversary.template.clone(),
+        position,
+        hp: adversary.hp,
+        max_hp: adversary.max_hp,
+        evasion: adversary.evasion,
+        armor: adversary.armor,
+        attack_modifier: adversary.attack_modifier,
+        damage_dice: adversary.damage_dice.clone(),
+    };
+    let _ = state.broadcaster.send(msg.to_json());
+    
+    // Broadcast event
+    if let Some(event) = game.event_log.last() {
+        broadcast_event(state, event).await;
+    }
+}
+
+/// Handle removing an adversary
+async fn handle_remove_adversary(state: &AppState, adversary_id: String) {
+    let mut game = state.game.write().await;
+    
+    if let Some(adversary) = game.remove_adversary(&adversary_id) {
+        let msg = ServerMessage::AdversaryRemoved {
+            adversary_id,
+            name: adversary.name.clone(),
+        };
+        let _ = state.broadcaster.send(msg.to_json());
+        
+        // Broadcast event
+        if let Some(event) = game.event_log.last() {
+            broadcast_event(state, event).await;
+        }
+    }
+}
+
+/// Handle starting combat
+async fn handle_start_combat(state: &AppState) {
+    let mut game = state.game.write().await;
+    
+    let encounter_id = game.start_combat();
+    
+    if let Some(encounter) = game.get_combat() {
+        let msg = ServerMessage::CombatStarted {
+            encounter_id,
+            pc_tokens: encounter.action_tracker.pc_tokens,
+            adversary_tokens: encounter.action_tracker.adversary_tokens,
+        };
+        let _ = state.broadcaster.send(msg.to_json());
+        
+        // Broadcast event
+        if let Some(event) = game.event_log.last() {
+            broadcast_event(state, event).await;
+        }
+    }
+}
+
+/// Handle ending combat
+async fn handle_end_combat(state: &AppState) {
+    let mut game = state.game.write().await;
+    
+    game.end_combat("manual");
+    
+    let msg = ServerMessage::CombatEnded {
+        reason: "manual".to_string(),
+    };
+    let _ = state.broadcaster.send(msg.to_json());
+    
+    // Broadcast event
+    if let Some(event) = game.event_log.last() {
+        broadcast_event(state, event).await;
+    }
+}
+
+/// Handle adding a tracker token
+async fn handle_add_tracker_token(state: &AppState, token_type: String) {
+    let mut game = state.game.write().await;
+    
+    if let Some(encounter) = game.get_combat_mut() {
+        match token_type.as_str() {
+            "pc" => encounter.action_tracker.add_pc_token(),
+            "adversary" => encounter.action_tracker.add_adversary_token(),
+            _ => {
+                send_error(state, &format!("Invalid token type: {}", token_type)).await;
+                return;
+            }
+        }
+        
+        let next_token = encounter.action_tracker.get_next()
+            .map(|t| format!("{:?}", t).to_lowercase())
+            .unwrap_or_else(|| "none".to_string());
+        
+        let msg = ServerMessage::TrackerUpdated {
+            pc_tokens: encounter.action_tracker.pc_tokens,
+            adversary_tokens: encounter.action_tracker.adversary_tokens,
+            next_token,
+        };
+        let _ = state.broadcaster.send(msg.to_json());
+    }
+}
+
+/// Handle attack roll
+async fn handle_attack(
+    state: &AppState,
+    attacker_id: String,
+    target_id: String,
+    modifier: i8,
+    with_advantage: bool,
+) {
+    use daggerheart_engine::core::dice::duality::DualityRoll;
+    
+    let game = state.game.read().await;
+    
+    // Get attacker and target names
+    let attacker_name = game.characters.values()
+        .find(|c| c.id.to_string() == attacker_id)
+        .map(|c| c.name.clone())
+        .or_else(|| {
+            game.adversaries.values()
+                .find(|a| a.id == attacker_id)
+                .map(|a| a.name.clone())
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+    
+    let target_name = game.characters.values()
+        .find(|c| c.id.to_string() == target_id)
+        .map(|c| c.name.clone())
+        .or_else(|| {
+            game.adversaries.values()
+                .find(|a| a.id == target_id)
+                .map(|a| a.name.clone())
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+    
+    let target_evasion = game.characters.values()
+        .find(|c| c.id.to_string() == target_id)
+        .map(|c| c.evasion as u8)
+        .or_else(|| {
+            game.adversaries.values()
+                .find(|a| a.id == target_id)
+                .map(|a| a.evasion)
+        })
+        .unwrap_or(10);
+    
+    // Roll attack
+    let roll = DualityRoll::roll();
+    let result = if with_advantage {
+        roll.with_advantage()
+    } else {
+        roll.with_modifier(modifier)
+    };
+    
+    let hope = result.roll.hope as u16;
+    let fear = result.roll.fear as u16;
+    let controlling_die = if hope > fear { "hope" } else { "fear" };
+    let total = result.total as u16;
+    let hit = total >= target_evasion as u16;
+    let is_critical = result.is_critical;
+    
+    // Broadcast attack result
+    let msg = ServerMessage::AttackResult {
+        attacker_id: attacker_id.clone(),
+        attacker_name: attacker_name.clone(),
+        target_id: target_id.clone(),
+        target_name: target_name.clone(),
+        hope,
+        fear,
+        modifier,
+        total,
+        target_evasion,
+        hit,
+        controlling_die: controlling_die.to_string(),
+        is_critical,
+    };
+    let _ = state.broadcaster.send(msg.to_json());
+}
+
+/// Handle damage roll
+async fn handle_roll_damage(
+    state: &AppState,
+    _attacker_id: String,
+    target_id: String,
+    damage_dice: String,
+    armor: u8,
+) {
+    use daggerheart_engine::combat::damage::DamageResult;
+    
+    // Parse and roll damage dice
+    let raw_damage = parse_and_roll_dice(&damage_dice);
+    
+    // Calculate damage with threshold system
+    let damage_result = DamageResult::calculate(raw_damage, armor);
+    
+    let mut game = state.game.write().await;
+    
+    // Get target name
+    let target_name = game.characters.values()
+        .find(|c| c.id.to_string() == target_id)
+        .map(|c| c.name.clone())
+        .or_else(|| {
+            game.adversaries.values()
+                .find(|a| a.id == target_id)
+                .map(|a| a.name.clone())
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+    
+    // Apply damage to target
+    let mut taken_out = false;
+    let mut new_hp = 0;
+    let mut new_stress = 0;
+    
+    if let Some(character) = game.characters.values_mut().find(|c| c.id.to_string() == target_id) {
+        // Apply to character
+        if damage_result.hp_lost > 0 {
+            character.hp_current = character.hp_current.saturating_sub(damage_result.hp_lost);
+        }
+        if damage_result.stress_gained > 0 {
+            character.stress_current = (character.stress_current + damage_result.stress_gained).min(character.hp_max);
+        }
+        new_hp = character.hp_current;
+        new_stress = character.stress_current;
+        
+        if character.hp_current == 0 && character.stress_current >= character.hp_max {
+            taken_out = true;
+        }
+    } else if let Some(adversary) = game.adversaries.values_mut().find(|a| a.id == target_id) {
+        // Apply to adversary
+        taken_out = adversary.take_damage(damage_result.hp_lost, damage_result.stress_gained);
+        new_hp = adversary.hp;
+        new_stress = adversary.stress;
+    }
+    
+    // Broadcast damage result
+    let msg = ServerMessage::DamageResult {
+        target_id: target_id.clone(),
+        target_name: target_name.clone(),
+        raw_damage: damage_result.raw_damage,
+        after_armor: damage_result.after_armor,
+        hp_lost: damage_result.hp_lost,
+        stress_gained: damage_result.stress_gained,
+        new_hp,
+        new_stress,
+        taken_out,
+    };
+    let _ = state.broadcaster.send(msg.to_json());
+    
+    // Log event
+    game.add_event(
+        game::GameEventType::CombatAction,
+        format!(
+            "{} took {} damage ({} HP, {} Stress)",
+            target_name, damage_result.after_armor, damage_result.hp_lost, damage_result.stress_gained
+        ),
+        Some(target_name),
+        if taken_out {
+            Some("Taken out!".to_string())
+        } else {
+            None
+        },
+    );
+    
+    if let Some(event) = game.event_log.last() {
+        broadcast_event(state, event).await;
+    }
+}
+
+/// Parse and roll damage dice (e.g., "1d8+2" or "2d6")
+fn parse_and_roll_dice(dice_str: &str) -> u16 {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    
+    // Split on '+' or '-'
+    let (dice_part, modifier) = if let Some(pos) = dice_str.find('+') {
+        let (d, m) = dice_str.split_at(pos);
+        (d, m[1..].parse::<i16>().unwrap_or(0))
+    } else if let Some(pos) = dice_str.find('-') {
+        let (d, m) = dice_str.split_at(pos);
+        (d, -m[1..].parse::<i16>().unwrap_or(0))
+    } else {
+        (dice_str, 0)
+    };
+    
+    // Parse "XdY" format
+    if let Some(d_pos) = dice_part.find('d') {
+        let (num_str, die_str) = dice_part.split_at(d_pos);
+        let num_dice = num_str.parse::<u16>().unwrap_or(1);
+        let die_size = die_str[1..].parse::<u16>().unwrap_or(6);
+        
+        let mut total = 0;
+        for _ in 0..num_dice {
+            total += rng.gen_range(1..=die_size);
+        }
+        
+        (total as i16 + modifier).max(0) as u16
+    } else {
+        // Just a flat number
+        dice_part.parse::<u16>().unwrap_or(0)
     }
 }
 

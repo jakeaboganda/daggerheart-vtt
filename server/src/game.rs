@@ -76,6 +76,211 @@ pub struct PendingRollRequest {
     pub timestamp: std::time::SystemTime,
 }
 
+/// Token type in the Action Tracker
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenType {
+    PC,
+    Adversary,
+}
+
+/// Action Tracker for combat turn order
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionTracker {
+    pub pc_tokens: u8,
+    pub adversary_tokens: u8,
+    pub queue: Vec<TokenType>, // Order of tokens (leftmost = next)
+}
+
+impl ActionTracker {
+    pub fn new() -> Self {
+        Self {
+            pc_tokens: 3,
+            adversary_tokens: 3,
+            queue: vec![
+                TokenType::PC,
+                TokenType::PC,
+                TokenType::PC,
+                TokenType::Adversary,
+                TokenType::Adversary,
+                TokenType::Adversary,
+            ],
+        }
+    }
+
+    /// Get the next token to act (leftmost in queue)
+    pub fn get_next(&self) -> Option<TokenType> {
+        self.queue.first().copied()
+    }
+
+    /// Remove the next token from the queue
+    pub fn pop_next(&mut self) -> Option<TokenType> {
+        if !self.queue.is_empty() {
+            Some(self.queue.remove(0))
+        } else {
+            None
+        }
+    }
+
+    /// Advance a token (add to end of queue)
+    pub fn advance_token(&mut self, token_type: TokenType) {
+        match token_type {
+            TokenType::PC if self.pc_tokens > 0 => {
+                self.pc_tokens -= 1;
+                self.queue.push(TokenType::PC);
+            }
+            TokenType::Adversary if self.adversary_tokens > 0 => {
+                self.adversary_tokens -= 1;
+                self.queue.push(TokenType::Adversary);
+            }
+            _ => {}
+        }
+    }
+
+    /// Refill tokens when pool is depleted
+    pub fn refill_if_needed(&mut self) {
+        if self.queue.is_empty() {
+            self.pc_tokens = 3;
+            self.adversary_tokens = 3;
+            self.queue = vec![
+                TokenType::PC,
+                TokenType::PC,
+                TokenType::PC,
+                TokenType::Adversary,
+                TokenType::Adversary,
+                TokenType::Adversary,
+            ];
+        }
+    }
+
+    /// Add a PC token
+    pub fn add_pc_token(&mut self) {
+        self.pc_tokens += 1;
+        self.queue.push(TokenType::PC);
+    }
+
+    /// Add an Adversary token
+    pub fn add_adversary_token(&mut self) {
+        self.adversary_tokens += 1;
+        self.queue.push(TokenType::Adversary);
+    }
+}
+
+/// Combat encounter state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CombatEncounter {
+    pub id: String,
+    pub is_active: bool,
+    pub round: u32,
+    pub action_tracker: ActionTracker,
+}
+
+impl CombatEncounter {
+    pub fn new() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            is_active: true,
+            round: 1,
+            action_tracker: ActionTracker::new(),
+        }
+    }
+}
+
+/// Adversary (enemy) in the game
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Adversary {
+    pub id: String,
+    pub name: String,
+    pub template: String,
+    pub position: crate::protocol::Position,
+    pub hp: u8,
+    pub max_hp: u8,
+    pub stress: u8,
+    pub max_stress: u8,
+    pub evasion: u8,
+    pub armor: u8,
+    pub attack_modifier: i8,
+    pub damage_dice: String,
+    pub is_active: bool,
+}
+
+impl Adversary {
+    /// Create from template
+    pub fn from_template(
+        template: &crate::adversaries::AdversaryTemplate,
+        position: crate::protocol::Position,
+        instance_number: usize,
+    ) -> Self {
+        let name = if instance_number > 0 {
+            format!("{} #{}", template.name, instance_number)
+        } else {
+            template.name.clone()
+        };
+
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name,
+            template: template.id.clone(),
+            position,
+            hp: template.hp,
+            max_hp: template.hp,
+            stress: 0,
+            max_stress: template.hp, // Stress max = HP max in Daggerheart
+            evasion: template.evasion,
+            armor: template.armor,
+            attack_modifier: template.attack_modifier,
+            damage_dice: template.damage.clone(),
+            is_active: true,
+        }
+    }
+
+    /// Create custom adversary
+    pub fn custom(
+        name: String,
+        position: crate::protocol::Position,
+        hp: u8,
+        evasion: u8,
+        armor: u8,
+        attack_modifier: i8,
+        damage_dice: String,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name,
+            template: "custom".to_string(),
+            position,
+            hp,
+            max_hp: hp,
+            stress: 0,
+            max_stress: hp,
+            evasion,
+            armor,
+            attack_modifier,
+            damage_dice,
+            is_active: true,
+        }
+    }
+
+    /// Take damage (returns true if taken out)
+    pub fn take_damage(&mut self, hp_loss: u8, stress_gain: u8) -> bool {
+        if hp_loss > 0 {
+            self.hp = self.hp.saturating_sub(hp_loss);
+        }
+
+        if stress_gain > 0 {
+            self.stress = (self.stress + stress_gain).min(self.max_stress);
+        }
+
+        // Taken out if HP = 0 and Stress = max
+        if self.hp == 0 && self.stress >= self.max_stress {
+            self.is_active = false;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// A character in the game (persistent entity)
 #[derive(Debug, Clone, Serialize)]
 pub struct Character {
@@ -309,6 +514,12 @@ pub struct GameState {
     
     /// Game event log
     pub event_log: Vec<GameEvent>,
+    
+    /// Combat encounter (if active)
+    pub combat_encounter: Option<CombatEncounter>,
+    
+    /// Adversaries in the game
+    pub adversaries: HashMap<String, Adversary>,
 }
 
 impl GameState {
@@ -321,6 +532,8 @@ impl GameState {
             pending_roll_requests: HashMap::new(),
             fear_pool: 5, // Starting Fear pool
             event_log: Vec::new(),
+            combat_encounter: None,
+            adversaries: HashMap::new(),
         }
     }
 
@@ -665,7 +878,194 @@ impl GameState {
             fear_change,
         })
     }
+
+    // ===== Combat Management =====
+
+    /// Start a new combat encounter
+    pub fn start_combat(&mut self) -> String {
+        let encounter = CombatEncounter::new();
+        let encounter_id = encounter.id.clone();
+        
+        self.combat_encounter = Some(encounter);
+        
+        // Log event
+        self.add_event(
+            GameEventType::SystemMessage,
+            "Combat started".to_string(),
+            None,
+            Some(format!("Round {}", 1)),
+        );
+        
+        encounter_id
+    }
+
+    /// End the current combat encounter
+    pub fn end_combat(&mut self, reason: &str) {
+        if let Some(_encounter) = self.combat_encounter.take() {
+            self.add_event(
+                GameEventType::SystemMessage,
+                format!("Combat ended: {}", reason),
+                None,
+                None,
+            );
+        }
+    }
+
+    /// Get the current combat encounter
+    pub fn get_combat(&self) -> Option<&CombatEncounter> {
+        self.combat_encounter.as_ref()
+    }
+
+    /// Get mutable reference to combat
+    pub fn get_combat_mut(&mut self) -> Option<&mut CombatEncounter> {
+        self.combat_encounter.as_mut()
+    }
+
+    /// Advance the action tracker based on roll result
+    pub fn advance_tracker(&mut self, success_with_hope: bool) {
+        if let Some(encounter) = &mut self.combat_encounter {
+            let token_type = if success_with_hope {
+                TokenType::PC
+            } else {
+                TokenType::Adversary
+            };
+            
+            encounter.action_tracker.advance_token(token_type);
+            encounter.action_tracker.refill_if_needed();
+        }
+    }
+
+    /// Get next actor in combat
+    pub fn get_next_actor(&self) -> Option<TokenType> {
+        self.combat_encounter
+            .as_ref()
+            .and_then(|e| e.action_tracker.get_next())
+    }
+
+    // ===== Adversary Management =====
+
+    /// Spawn an adversary from template
+    pub fn spawn_adversary(
+        &mut self,
+        template_id: &str,
+        position: crate::protocol::Position,
+    ) -> Result<Adversary, String> {
+        let template = crate::adversaries::AdversaryTemplate::get_template(template_id)
+            .ok_or_else(|| format!("Template not found: {}", template_id))?;
+
+        // Count existing adversaries with this template for instance numbering
+        let instance_count = self
+            .adversaries
+            .values()
+            .filter(|adv| adv.template == template_id)
+            .count();
+
+        let adversary = Adversary::from_template(&template, position, instance_count + 1);
+        let adversary_id = adversary.id.clone();
+        
+        // Log event
+        self.add_event(
+            GameEventType::SystemMessage,
+            format!("{} spawned", adversary.name),
+            None,
+            Some(format!(
+                "HP: {}/{}, Evasion: {}, Armor: {}",
+                adversary.hp, adversary.max_hp, adversary.evasion, adversary.armor
+            )),
+        );
+
+        self.adversaries.insert(adversary_id.clone(), adversary.clone());
+        Ok(adversary)
+    }
+
+    /// Create a custom adversary
+    pub fn create_custom_adversary(
+        &mut self,
+        name: String,
+        position: crate::protocol::Position,
+        hp: u8,
+        evasion: u8,
+        armor: u8,
+        attack_modifier: i8,
+        damage_dice: String,
+    ) -> Adversary {
+        let adversary = Adversary::custom(
+            name.clone(),
+            position,
+            hp,
+            evasion,
+            armor,
+            attack_modifier,
+            damage_dice,
+        );
+
+        // Log event
+        self.add_event(
+            GameEventType::SystemMessage,
+            format!("{} spawned (custom)", adversary.name),
+            None,
+            Some(format!(
+                "HP: {}/{}, Evasion: {}, Armor: {}",
+                adversary.hp, adversary.max_hp, adversary.evasion, adversary.armor
+            )),
+        );
+
+        let adversary_id = adversary.id.clone();
+        self.adversaries.insert(adversary_id, adversary.clone());
+        adversary
+    }
+
+    /// Remove an adversary
+    pub fn remove_adversary(&mut self, adversary_id: &str) -> Option<Adversary> {
+        if let Some(adversary) = self.adversaries.remove(adversary_id) {
+            self.add_event(
+                GameEventType::SystemMessage,
+                format!("{} removed", adversary.name),
+                None,
+                None,
+            );
+            Some(adversary)
+        } else {
+            None
+        }
+    }
+
+    /// Get all adversaries
+    pub fn get_adversaries(&self) -> Vec<&Adversary> {
+        self.adversaries.values().collect()
+    }
+
+    /// Get active adversaries only
+    pub fn get_active_adversaries(&self) -> Vec<&Adversary> {
+        self.adversaries
+            .values()
+            .filter(|adv| adv.is_active)
+            .collect()
+    }
+
+    /// Update adversary HP after damage
+    pub fn update_adversary_hp(&mut self, adversary_id: &str, hp_loss: u8, stress_gain: u8) -> Result<bool, String> {
+        let adversary = self
+            .adversaries
+            .get_mut(adversary_id)
+            .ok_or_else(|| format!("Adversary not found: {}", adversary_id))?;
+
+        let taken_out = adversary.take_damage(hp_loss, stress_gain);
+        let adversary_name = adversary.name.clone(); // Clone before borrowing self again
+
+        if taken_out {
+            self.add_event(
+                GameEventType::CombatAction,
+                format!("{} taken out!", adversary_name),
+                None,
+                None,
+            );
+        }
+
+        Ok(taken_out)
+    }
 }
+
 
 /// Shared game state wrapped for concurrent access
 pub type SharedGameState = Arc<RwLock<GameState>>;

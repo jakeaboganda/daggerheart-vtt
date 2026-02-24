@@ -205,6 +205,61 @@ pub enum ClientMessage {
         spend_hope_for_bonus: bool,
         chosen_experience: Option<String>,
     },
+
+    // ===== Combat & Adversary Messages =====
+    
+    /// GM spawns an adversary from template
+    #[serde(rename = "spawn_adversary")]
+    SpawnAdversary {
+        template: String, // "goblin", "bandit", etc.
+        position: Position,
+    },
+
+    /// GM creates a custom adversary
+    #[serde(rename = "spawn_custom_adversary")]
+    SpawnCustomAdversary {
+        name: String,
+        position: Position,
+        hp: u8,
+        evasion: u8,
+        armor: u8,
+        attack_modifier: i8,
+        damage_dice: String,
+    },
+
+    /// GM removes an adversary
+    #[serde(rename = "remove_adversary")]
+    RemoveAdversary { adversary_id: String },
+
+    /// GM starts combat
+    #[serde(rename = "start_combat")]
+    StartCombat,
+
+    /// GM ends combat
+    #[serde(rename = "end_combat")]
+    EndCombat,
+
+    /// GM adds a token to the action tracker
+    #[serde(rename = "add_tracker_token")]
+    AddTrackerToken { token_type: String }, // "pc" or "adversary"
+
+    /// Player or GM rolls an attack
+    #[serde(rename = "attack")]
+    Attack {
+        attacker_id: String, // character or adversary ID
+        target_id: String,   // character or adversary ID
+        modifier: i8,
+        with_advantage: bool,
+    },
+
+    /// Roll damage after a successful attack
+    #[serde(rename = "roll_damage")]
+    RollDamage {
+        attacker_id: String,
+        target_id: String,
+        damage_dice: String, // "1d8+2"
+        armor: u8,
+    },
 }
 
 /// Server → Client messages
@@ -324,6 +379,90 @@ pub enum ServerMessage {
     #[serde(rename = "event_log")]
     EventLog {
         events: Vec<GameEventData>,
+    },
+
+    // ===== Combat & Adversary Messages =====
+    
+    /// Adversary spawned
+    #[serde(rename = "adversary_spawned")]
+    AdversarySpawned {
+        adversary_id: String,
+        name: String,
+        template: String,
+        position: Position,
+        hp: u8,
+        max_hp: u8,
+        evasion: u8,
+        armor: u8,
+        attack_modifier: i8,
+        damage_dice: String,
+    },
+
+    /// Adversary removed
+    #[serde(rename = "adversary_removed")]
+    AdversaryRemoved {
+        adversary_id: String,
+        name: String,
+    },
+
+    /// Adversary updated (HP/Stress changed)
+    #[serde(rename = "adversary_updated")]
+    AdversaryUpdated {
+        adversary_id: String,
+        hp: u8,
+        stress: u8,
+        is_active: bool,
+    },
+
+    /// Combat started
+    #[serde(rename = "combat_started")]
+    CombatStarted {
+        encounter_id: String,
+        pc_tokens: u8,
+        adversary_tokens: u8,
+    },
+
+    /// Combat ended
+    #[serde(rename = "combat_ended")]
+    CombatEnded { reason: String },
+
+    /// Action tracker updated
+    #[serde(rename = "tracker_updated")]
+    TrackerUpdated {
+        pc_tokens: u8,
+        adversary_tokens: u8,
+        next_token: String, // "pc" or "adversary"
+    },
+
+    /// Attack result
+    #[serde(rename = "attack_result")]
+    AttackResult {
+        attacker_id: String,
+        attacker_name: String,
+        target_id: String,
+        target_name: String,
+        hope: u16,
+        fear: u16,
+        modifier: i8,
+        total: u16,
+        target_evasion: u8,
+        hit: bool,
+        controlling_die: String, // "hope" or "fear"
+        is_critical: bool,
+    },
+
+    /// Damage result
+    #[serde(rename = "damage_result")]
+    DamageResult {
+        target_id: String,
+        target_name: String,
+        raw_damage: u16,
+        after_armor: u16,
+        hp_lost: u8,
+        stress_gained: u8,
+        new_hp: u8,
+        new_stress: u8,
+        taken_out: bool,
     },
 
     /// Error message
