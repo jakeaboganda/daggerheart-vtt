@@ -383,6 +383,15 @@ function handleServerMessage(message) {
         case 'game_event':
             handleGameEvent(payload);
             break;
+        case 'adversary_spawned':
+            handleAdversarySpawned(payload);
+            break;
+        case 'adversary_removed':
+            handleAdversaryRemoved(payload);
+            break;
+        case 'adversary_updated':
+            handleAdversaryUpdated(payload);
+            break;
         case 'error':
             handleError(payload);
             break;
@@ -875,6 +884,35 @@ function updateRollStatusOnTV(status) {
 // Event Log Functions
 function handleGameEvent(payload) {
     addEventToLog(payload);
+}
+
+// Adversary Handlers
+function handleAdversarySpawned(payload) {
+    const { adversary_id, name, position } = payload;
+    console.log(`👹 Adversary spawned: ${name} at (${position.x}, ${position.y})`);
+    
+    if (mapCanvas) {
+        mapCanvas.drawAdversary(adversary_id, name, position.x, position.y);
+    }
+}
+
+function handleAdversaryRemoved(payload) {
+    const { adversary_id, name } = payload;
+    console.log(`💀 Adversary removed: ${name}`);
+    
+    if (mapCanvas) {
+        mapCanvas.removeAdversary(adversary_id);
+    }
+}
+
+function handleAdversaryUpdated(payload) {
+    const { adversary_id, hp } = payload;
+    console.log(`🩸 Adversary ${adversary_id} updated: HP ${hp}`);
+    
+    if (mapCanvas && payload.hp !== undefined) {
+        // Assuming max_hp is sent or we track it
+        mapCanvas.updateAdversaryHP(adversary_id, hp, payload.max_hp || hp);
+    }
 }
 
 function addEventToLog(event) {
