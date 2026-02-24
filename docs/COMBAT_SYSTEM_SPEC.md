@@ -21,6 +21,196 @@ Daggerheart combat is **fundamentally different** from D&D:
 
 ---
 
+## 👹 Adversary Management System
+
+### Pre-Combat: Creating Adversaries
+
+**Before combat starts**, GM needs to spawn adversaries on the map:
+
+#### Adversary Library
+**Built-in Templates:**
+```
+Common:
+  Goblin       - HP: 3, Evasion: 10, Armor: 1, Damage: 1d6
+  Bandit       - HP: 4, Evasion: 11, Armor: 2, Damage: 1d6+1
+  Wolf         - HP: 3, Evasion: 12, Armor: 0, Damage: 1d6
+  
+Medium:
+  Orc Warrior  - HP: 5, Evasion: 10, Armor: 3, Damage: 1d8+2
+  Shadow Beast - HP: 4, Evasion: 13, Armor: 1, Damage: 1d8
+  
+Boss:
+  Ogre         - HP: 8, Evasion: 9, Armor: 4, Damage: 2d6+3
+  Dragon Wyrmling - HP: 10, Evasion: 12, Armor: 5, Damage: 2d8+2
+```
+
+#### GM Spawning Flow
+1. **Open Adversary Panel** (GM view sidebar)
+2. **Select template** from dropdown OR **Create Custom**
+3. **Set stats:**
+   - Name (e.g., "Goblin Archer #1")
+   - HP / Max HP
+   - Evasion
+   - Armor Score
+   - Attack Modifier
+   - Damage Dice (e.g., "1d6+1")
+4. **Click on map** to place adversary
+5. **Adversary appears:**
+   - Token on canvas (red/purple)
+   - Added to combatant list
+   - Broadcasted to all clients
+6. **Repeat** for multiple enemies
+
+#### Custom Adversary Creation
+```
+┌─────────────────────────────────┐
+│ ➕ Create Adversary             │
+├─────────────────────────────────┤
+│ Name: [Goblin Archer #1      ]  │
+│                                 │
+│ HP: [3] / Max: [3]              │
+│ Evasion: [10]                   │
+│ Armor: [1]                      │
+│                                 │
+│ Attack Modifier: [+1]           │
+│ Damage: [1d6]                   │
+│                                 │
+│ [💾 Save Template] [🗑️ Delete]  │
+│ [✅ Spawn on Map]               │
+└─────────────────────────────────┘
+```
+
+### Adversary State Management
+
+**Backend Storage:**
+```rust
+pub struct Adversary {
+    pub id: String,
+    pub name: String,
+    pub template: String,  // "goblin", "custom", etc.
+    pub position: Position,
+    pub hp: u8,
+    pub max_hp: u8,
+    pub stress: u8,
+    pub max_stress: u8,
+    pub evasion: u8,
+    pub armor: u8,
+    pub attack_modifier: i8,
+    pub damage_dice: String,  // "1d6+1"
+    pub is_active: bool,  // false when taken out
+}
+
+impl GameState {
+    pub fn spawn_adversary(&mut self, template: &str, position: Position) -> String;
+    pub fn create_custom_adversary(&mut self, stats: AdversaryStats) -> String;
+    pub fn remove_adversary(&mut self, id: &str);
+    pub fn get_adversaries(&self) -> Vec<&Adversary>;
+    pub fn get_active_adversaries(&self) -> Vec<&Adversary>;
+    pub fn update_adversary_hp(&mut self, id: &str, new_hp: u8);
+}
+```
+
+**WebSocket Protocol:**
+```rust
+// Client → Server
+ClientMessage::SpawnAdversary {
+    template: String,  // "goblin" or "custom"
+    position: Position,
+    custom_stats: Option<AdversaryStats>,
+}
+
+ClientMessage::RemoveAdversary {
+    adversary_id: String,
+}
+
+ClientMessage::UpdateAdversary {
+    adversary_id: String,
+    stats: AdversaryStats,
+}
+
+// Server → Clients
+ServerMessage::AdversarySpawned {
+    adversary: AdversaryData,
+}
+
+ServerMessage::AdversaryRemoved {
+    adversary_id: String,
+    name: String,
+}
+
+ServerMessage::AdversaryUpdated {
+    adversary_id: String,
+    hp: u8,
+    stress: u8,
+    position: Position,
+}
+```
+
+### Adversary Templates System
+
+**JSON Template Files:**
+```json
+{
+  "templates": [
+    {
+      "id": "goblin",
+      "name": "Goblin",
+      "tier": "common",
+      "hp": 3,
+      "evasion": 10,
+      "armor": 1,
+      "attack_modifier": 1,
+      "damage": "1d6",
+      "description": "Small, cunning raiders"
+    },
+    {
+      "id": "orc_warrior",
+      "name": "Orc Warrior",
+      "tier": "medium",
+      "hp": 5,
+      "evasion": 10,
+      "armor": 3,
+      "attack_modifier": 2,
+      "damage": "1d8+2",
+      "description": "Brutal melee combatant"
+    }
+  ]
+}
+```
+
+**Loading Templates:**
+```rust
+// server/src/adversaries.rs (new file)
+pub fn load_templates() -> Vec<AdversaryTemplate>;
+pub fn get_template(id: &str) -> Option<AdversaryTemplate>;
+```
+
+### Combat Integration
+
+**When combat starts:**
+1. Count active adversaries on map
+2. Initialize Action Tracker (3 PC tokens, 3 Adversary tokens)
+3. Adversaries can be targeted for attacks
+4. GM can roll adversary attacks
+
+**Adversary Attacks (GM-controlled):**
+```
+┌─────────────────────────────────┐
+│ Goblin Archer #1's Turn         │
+├─────────────────────────────────┤
+│ Target: [Select PC ▼]           │
+│ • Theron (Evasion 11)           │
+│ • Elara (Evasion 13)            │
+│                                 │
+│ Attack: +1 modifier             │
+│ Damage: 1d6                     │
+│                                 │
+│ [🎲 Roll Attack]                │
+└─────────────────────────────────┘
+```
+
+---
+
 ## 🎯 Core Daggerheart Combat Flow
 
 ### Phase 1: Start Combat
@@ -323,6 +513,30 @@ After-Armor 15+:
 ### GM View
 ```
 ┌─────────────────────────────────┐
+│ 👹 Adversaries                  │
+├─────────────────────────────────┤
+│ Template: [Goblin ▼]            │
+│ • Goblin                        │
+│ • Bandit                        │
+│ • Orc Warrior                   │
+│ • [Custom...]                   │
+│                                 │
+│ [➕ Spawn on Map]               │
+│                                 │
+│ Active Adversaries:             │
+│                                 │
+│ Goblin #1 💀                    │
+│ ❤️ 3/3  ⚡ 0/3                  │
+│ Evasion: 10  Armor: 1           │
+│ [⚔️ Attack] [🗑️ Remove]         │
+│                                 │
+│ Goblin #2 💀                    │
+│ ❤️ 2/3  ⚡ 1/3                  │
+│ Evasion: 10  Armor: 1           │
+│ [⚔️ Attack] [🗑️ Remove]         │
+└─────────────────────────────────┘
+
+┌─────────────────────────────────┐
 │ 🎮 Combat Control               │
 ├─────────────────────────────────┤
 │ Status: Active                  │
@@ -339,17 +553,11 @@ After-Armor 15+:
 │ [🛑 End Combat]                 │
 │                                 │
 │ ───────────────────────────────│
-│ Combatants:                     │
+│ Player Characters:              │
 │                                 │
 │ Theron (PC) ⚔️                  │
 │ ❤️ 3/5  ⚡ 3/5                  │
 │ Evasion: 11  Armor: 3           │
-│                                 │
-│ Goblin 💀                       │
-│ ❤️ 2/3  ⚡ 0/3                  │
-│ Evasion: 10  Armor: 2           │
-│                                 │
-│ [Roll Adversary Attack]         │
 └─────────────────────────────────┘
 ```
 
@@ -393,11 +601,72 @@ impl GameState {
 }
 ```
 
+#### 1.1.5 Adversary Management
+**File:** `server/src/game.rs` + `server/src/adversaries.rs` (new)
+
+```rust
+// game.rs
+pub struct Adversary {
+    pub id: String,
+    pub name: String,
+    pub template: String,
+    pub position: Position,
+    pub hp: u8,
+    pub max_hp: u8,
+    pub stress: u8,
+    pub max_stress: u8,
+    pub evasion: u8,
+    pub armor: u8,
+    pub attack_modifier: i8,
+    pub damage_dice: String,
+    pub is_active: bool,
+}
+
+impl GameState {
+    pub fn spawn_adversary(&mut self, template: &str, pos: Position) -> String;
+    pub fn create_custom_adversary(&mut self, stats: AdversaryStats) -> String;
+    pub fn remove_adversary(&mut self, id: &str);
+    pub fn get_adversaries(&self) -> Vec<&Adversary>;
+    pub fn update_adversary_hp(&mut self, id: &str, new_hp: u8);
+}
+
+// adversaries.rs (new file)
+pub struct AdversaryTemplate {
+    pub id: String,
+    pub name: String,
+    pub tier: String,
+    pub hp: u8,
+    pub evasion: u8,
+    pub armor: u8,
+    pub attack_modifier: i8,
+    pub damage: String,
+    pub description: String,
+}
+
+pub fn load_templates() -> Vec<AdversaryTemplate>;
+pub fn get_template(id: &str) -> Option<AdversaryTemplate>;
+```
+
 #### 1.2 Attack Protocol
 **File:** `server/src/protocol.rs`
 
 ```rust
 // Client → Server
+ClientMessage::SpawnAdversary {
+    template: String,  // "goblin", "bandit", "custom"
+    position: Position,
+    custom_stats: Option<AdversaryStats>,
+}
+
+ClientMessage::RemoveAdversary {
+    adversary_id: String,
+}
+
+ClientMessage::AdversaryAttack {
+    adversary_id: String,
+    target_id: String,  // PC character ID
+}
+
 ClientMessage::Attack {
     attacker_id: String,
     target_id: String,
@@ -414,6 +683,30 @@ ClientMessage::EndTurn {
 }
 
 // Server → Clients
+ServerMessage::AdversarySpawned {
+    adversary_id: String,
+    name: String,
+    template: String,
+    position: Position,
+    hp: u8,
+    max_hp: u8,
+    evasion: u8,
+    armor: u8,
+    attack_modifier: i8,
+    damage_dice: String,
+}
+
+ServerMessage::AdversaryRemoved {
+    adversary_id: String,
+    name: String,
+}
+
+ServerMessage::AdversaryUpdated {
+    adversary_id: String,
+    hp: u8,
+    stress: u8,
+}
+
 ServerMessage::CombatStarted {
     encounter_id: String,
     initial_tracker: ActionTracker,
@@ -462,6 +755,24 @@ ServerMessage::CombatEnded {
 **File:** `server/src/websocket.rs`
 
 ```rust
+async fn handle_spawn_adversary(
+    state: &AppState,
+    template: String,
+    position: Position,
+    custom_stats: Option<AdversaryStats>,
+);
+
+async fn handle_remove_adversary(
+    state: &AppState,
+    adversary_id: String,
+);
+
+async fn handle_adversary_attack(
+    state: &AppState,
+    adversary_id: String,
+    target_id: String,
+);
+
 async fn handle_attack(
     state: &AppState,
     attacker_id: String,
@@ -565,6 +876,37 @@ async fn handle_end_turn(
 
 ```html
 <div class="control-panel">
+    <h3>👹 Adversaries</h3>
+    
+    <label>Template:</label>
+    <select id="adversary-template">
+        <option value="goblin">Goblin (HP: 3, Evasion: 10)</option>
+        <option value="bandit">Bandit (HP: 4, Evasion: 11)</option>
+        <option value="wolf">Wolf (HP: 3, Evasion: 12)</option>
+        <option value="orc_warrior">Orc Warrior (HP: 5, Evasion: 10)</option>
+        <option value="custom">Custom...</option>
+    </select>
+    
+    <button id="spawn-adversary-btn">➕ Spawn on Map</button>
+    
+    <div id="custom-adversary-panel" style="display: none;">
+        <h4>Custom Adversary</h4>
+        <label>Name: <input type="text" id="adv-name" value="Custom Enemy"></label>
+        <label>HP: <input type="number" id="adv-hp" value="3"></label>
+        <label>Evasion: <input type="number" id="adv-evasion" value="10"></label>
+        <label>Armor: <input type="number" id="adv-armor" value="1"></label>
+        <label>Attack Mod: <input type="number" id="adv-attack-mod" value="1"></label>
+        <label>Damage: <input type="text" id="adv-damage" value="1d6"></label>
+        <button id="spawn-custom-btn">✅ Spawn Custom</button>
+    </div>
+    
+    <h4>Active Adversaries</h4>
+    <div id="adversaries-list">
+        <p class="empty-state">No adversaries spawned</p>
+    </div>
+</div>
+
+<div class="control-panel">
     <h3>⚔️ Combat</h3>
     
     <button id="start-combat-btn">Start Combat</button>
@@ -635,6 +977,46 @@ class CombatManager {
         // Log event
     }
 }
+
+class AdversaryManager {
+    constructor() {
+        this.adversaries = new Map();
+        this.templates = null;
+    }
+    
+    async loadTemplates() {
+        // Fetch adversary templates from server
+        // Store in this.templates
+    }
+    
+    spawnAdversary(template, position) {
+        // Send spawn message to server
+        // Add to local map
+    }
+    
+    handleAdversarySpawned(data) {
+        // Add adversary to map
+        // Render token on canvas
+        // Update GM adversary list
+        // Log event
+    }
+    
+    removeAdversary(id) {
+        // Send remove message
+        // Remove from map
+        // Remove token from canvas
+    }
+    
+    handleAdversaryUpdated(data) {
+        // Update HP/Stress displays
+        // Update canvas token
+    }
+    
+    rollAdversaryAttack(adversaryId, targetId) {
+        // Send adversary attack message
+        // Show roll result
+    }
+}
 ```
 
 #### 3.2 Visual Feedback
@@ -658,7 +1040,17 @@ Every combat action logged:
 
 ## 📝 Example Combat Flow
 
-### Setup
+### Pre-Combat Setup
+1. **GM opens adversary panel**
+2. **Selects "Goblin" template** from dropdown
+3. **Clicks on map** where goblin should appear (position: 10, 10)
+4. Server creates adversary: `id: "adv-001", name: "Goblin #1"`
+5. **Broadcasts `adversary_spawned`** to all clients
+6. **Goblin token appears** on TV and mobile maps
+7. **GM spawns second goblin** at position (15, 10)
+8. **Event log:** "Goblin #1 spawned", "Goblin #2 spawned"
+
+### Combat Start
 1. GM clicks "Start Combat"
 2. Server creates encounter
 3. Broadcasts `combat_started`
@@ -689,34 +1081,52 @@ Every combat action logged:
 ## 🎯 Success Criteria
 
 ### Must Have
+- [x] **Adversary spawning system** - GM can create and place enemies
+- [x] **Adversary templates** - Pre-defined enemy types (Goblin, Bandit, etc.)
+- [x] **Custom adversaries** - GM can create custom enemies with stats
 - [x] Action Tracker with PC/Adversary tokens
 - [x] Attack rolls using Duality system
 - [x] Damage calculation with thresholds
 - [x] HP and Stress tracking
 - [x] Turn-by-turn flow
 - [x] Mobile action selection
-- [x] TV combat display
+- [x] TV combat display (including adversary tokens)
 - [x] GM combat controls
+- [x] **GM adversary attacks** - Roll attacks for enemies
 - [x] Event logging for all actions
 
 ### Nice to Have
+- [ ] Adversary AI (auto-attacks)
 - [ ] Opportunity attacks
 - [ ] Movement tracking
 - [ ] Range checking
 - [ ] Status effects
 - [ ] Domain card integration
 - [ ] Reaction system
+- [ ] Save/load adversary templates
 
 ---
 
 ## 🚀 Implementation Order
 
-1. **Day 1 Morning:** Backend combat state + action tracker
-2. **Day 1 Afternoon:** Attack/damage handlers + protocol
-3. **Day 2 Morning:** Mobile combat UI (actions, rolls)
-4. **Day 2 Afternoon:** TV combat display + tracker visualization
-5. **Day 3 Morning:** GM controls + integration
-6. **Day 3 Afternoon:** Polish + testing + bug fixes
+1. **Day 1 Morning:** 
+   - Backend combat state + action tracker
+   - **Adversary data structures + templates**
+2. **Day 1 Afternoon:** 
+   - Attack/damage handlers + protocol
+   - **Adversary spawning/removal handlers**
+3. **Day 2 Morning:** 
+   - **GM adversary panel (spawn UI)**
+   - Mobile combat UI (actions, rolls)
+4. **Day 2 Afternoon:** 
+   - TV combat display + tracker visualization
+   - **Adversary tokens on canvas**
+5. **Day 3 Morning:** 
+   - GM controls + integration
+   - **Adversary attack rolls**
+6. **Day 3 Afternoon:** 
+   - Polish + testing + bug fixes
+   - **Event logging for adversary actions**
 
 ---
 
