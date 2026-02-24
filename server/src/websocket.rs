@@ -56,6 +56,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     // Send current characters list
     send_characters_list(&state, &conn_id, &mut sender).await;
+    
+    // Send current adversaries list
+    send_adversaries_list(&state, &mut sender).await;
 
     // Spawn task to forward broadcasts to this client
     let mut send_task = tokio::spawn(async move {
@@ -623,6 +626,19 @@ async fn send_characters_list(
     let _ = sender.send(Message::Text(msg.to_json())).await;
 }
 
+/// Send adversaries list to a specific connection
+async fn send_adversaries_list(
+    state: &AppState,
+    sender: &mut futures::stream::SplitSink<WebSocket, Message>,
+) {
+    let game = state.game.read().await;
+    let adversaries = build_adversaries_list(&game);
+    drop(game);
+
+    let msg = ServerMessage::AdversariesList { adversaries };
+    let _ = sender.send(Message::Text(msg.to_json())).await;
+}
+
 /// Broadcast characters list to all connections
 async fn broadcast_characters_list(state: &AppState) {
     println!("📡 Broadcasting characters list to all connections...");
@@ -655,6 +671,27 @@ fn build_character_list(game: &GameState, conn_id: &Uuid) -> Vec<CharacterInfo> 
                 controlled_by_me,
                 controlled_by_other,
             }
+        })
+        .collect()
+}
+
+/// Build adversaries list from game state
+fn build_adversaries_list(game: &GameState) -> Vec<protocol::AdversaryInfo> {
+    game.get_adversaries()
+        .iter()
+        .map(|adversary| protocol::AdversaryInfo {
+            id: adversary.id.clone(),
+            name: adversary.name.clone(),
+            template: adversary.template.clone(),
+            position: adversary.position,
+            hp: adversary.hp,
+            max_hp: adversary.max_hp,
+            stress: adversary.stress,
+            evasion: adversary.evasion,
+            armor: adversary.armor,
+            attack_modifier: adversary.attack_modifier,
+            damage_dice: adversary.damage_dice.clone(),
+            is_active: adversary.is_active,
         })
         .collect()
 }

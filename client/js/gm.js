@@ -191,6 +191,9 @@ function handleServerMessage(message) {
         case 'characters_list':
             handleCharactersList(payload);
             break;
+        case 'adversaries_list':
+            handleAdversariesList(payload);
+            break;
         case 'character_spawned':
             handleCharacterSpawned(payload);
             break;
@@ -263,6 +266,26 @@ function handleCharactersList(payload) {
     
     // Update roll target dropdown
     updateTargetDropdown(characters);
+}
+
+function handleAdversariesList(payload) {
+    adversaries = payload.adversaries || [];
+    console.log('👹 Adversaries list received:', adversaries);
+    
+    // Add all adversaries to canvas
+    if (mapCanvas) {
+        adversaries.forEach(adv => {
+            mapCanvas.drawAdversary(adv.id, adv.name, adv.position.x, adv.position.y);
+            if (adv.hp !== undefined && adv.max_hp !== undefined) {
+                mapCanvas.updateAdversaryHP(adv.id, adv.hp, adv.max_hp);
+            }
+        });
+    }
+    
+    // Update adversaries list UI
+    renderAdversariesList();
+    
+    console.log('👹 Total adversaries:', adversaries.length);
 }
 
 function handleCharacterSpawned(payload) {

@@ -147,6 +147,23 @@ pub struct CharacterInfo {
     pub controlled_by_other: bool, // True if another connection controls this character
 }
 
+/// Adversary information for listing
+#[derive(Debug, Clone, Serialize)]
+pub struct AdversaryInfo {
+    pub id: String,
+    pub name: String,
+    pub template: String,
+    pub position: Position,
+    pub hp: u8,
+    pub max_hp: u8,
+    pub stress: u8,
+    pub evasion: u8,
+    pub armor: u8,
+    pub attack_modifier: i8,
+    pub damage_dice: String,
+    pub is_active: bool,
+}
+
 /// Client → Server messages
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -273,6 +290,12 @@ pub enum ServerMessage {
     /// List of all characters in the game
     #[serde(rename = "characters_list")]
     CharactersList { characters: Vec<CharacterInfo> },
+
+    /// List of all adversaries in the game
+    #[serde(rename = "adversaries_list")]
+    AdversariesList {
+        adversaries: Vec<AdversaryInfo>,
+    },
 
     /// Character was selected successfully
     #[serde(rename = "character_selected")]

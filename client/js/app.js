@@ -353,6 +353,9 @@ function handleServerMessage(message) {
         case 'characters_list':
             handleCharactersList(payload);
             break;
+        case 'adversaries_list':
+            handleAdversariesList(payload);
+            break;
         case 'character_selected':
             handleCharacterSelected(payload);
             break;
@@ -462,6 +465,23 @@ function handleCharactersList(payload) {
     }
     
     console.log('📋 Adversaries after update:', mapCanvas?.adversaryPositions?.size || 0);
+}
+
+function handleAdversariesList(payload) {
+    const { adversaries } = payload;
+    console.log('👹 Adversaries list received:', adversaries);
+    
+    // Add all adversaries to canvas
+    if (mapCanvas) {
+        adversaries.forEach(adv => {
+            mapCanvas.drawAdversary(adv.id, adv.name, adv.position.x, adv.position.y);
+            if (adv.hp !== undefined && adv.max_hp !== undefined) {
+                mapCanvas.updateAdversaryHP(adv.id, adv.hp, adv.max_hp);
+            }
+        });
+    }
+    
+    console.log('👹 Total adversaries on canvas:', mapCanvas?.adversaryPositions?.size || 0);
 }
 
 function handleCharacterSelected(payload) {
