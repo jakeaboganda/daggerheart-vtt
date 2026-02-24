@@ -15,6 +15,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize canvas
     mapCanvas = new MapCanvas('gm-canvas');
     
+    // Setup canvas click handler for adversary spawning
+    const canvas = document.getElementById('gm-canvas');
+    if (canvas) {
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            
+            if (window.handleCanvasClick) {
+                window.handleCanvasClick(x, y);
+            }
+        });
+        console.log('Canvas click handler installed');
+    }
+    
     // Connect to WebSocket
     ws = new WebSocketClient(handleServerMessage);
     ws.connect();
