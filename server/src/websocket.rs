@@ -1305,4 +1305,51 @@ mod tests {
         let cloned = state.clone();
         assert!(Arc::ptr_eq(&state.game, &cloned.game));
     }
+
+    #[test]
+    fn test_parse_and_roll_dice_simple() {
+        // Test simple dice rolls multiple times to ensure validity
+        for _ in 0..10 {
+            let result = parse_and_roll_dice("1d6");
+            assert!(result >= 1 && result <= 6, "1d6 out of range: {}", result);
+        }
+    }
+
+    #[test]
+    fn test_parse_and_roll_dice_with_modifier() {
+        for _ in 0..10 {
+            let result = parse_and_roll_dice("1d8+2");
+            assert!(result >= 3 && result <= 10, "1d8+2 out of range: {}", result);
+        }
+    }
+
+    #[test]
+    fn test_parse_and_roll_dice_multiple_dice() {
+        for _ in 0..10 {
+            let result = parse_and_roll_dice("2d6");
+            assert!(result >= 2 && result <= 12, "2d6 out of range: {}", result);
+        }
+    }
+
+    #[test]
+    fn test_parse_and_roll_dice_with_negative_modifier() {
+        for _ in 0..10 {
+            let result = parse_and_roll_dice("1d6-1");
+            assert!(result <= 5, "1d6-1 out of range: {}", result);
+        }
+    }
+
+    #[test]
+    fn test_parse_and_roll_dice_complex() {
+        for _ in 0..10 {
+            let result = parse_and_roll_dice("2d8+3");
+            assert!(result >= 5 && result <= 19, "2d8+3 out of range: {}", result);
+        }
+    }
+
+    #[test]
+    fn test_parse_and_roll_dice_flat_number() {
+        let result = parse_and_roll_dice("5");
+        assert_eq!(result, 5);
+    }
 }

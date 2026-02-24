@@ -1580,4 +1580,289 @@ mod tests {
         assert_eq!(roll_result.attribute_modifier, 1); // Strength
         assert_eq!(roll_result.total_modifier, 2); // 1 + 1
     }
+
+    // ===== Combat & Adversary Tests =====
+
+    #[test]
+    fn test_spawn_adversary_from_template() {
+        let mut state = GameState::new();
+        let position = crate::protocol::Position::new(100.0, 100.0);
+
+        let result = state.spawn_adversary("goblin", position);
+        assert!(result.is_ok());
+
+        let adversary = result.unwrap();
+        assert_eq!(adversary.template, "goblin");
+        assert!(adversary.name.contains("Goblin"));
+        assert_eq!(adversary.hp, 3);
+        assert_eq!(adversary.max_hp, 3);
+        assert_eq!(adversary.evasion, 10);
+        assert_eq!(adversary.armor, 1);
+        assert_eq!(adversary.attack_modifier, 1);
+        assert_eq!(adversary.damage_dice, "1d6");
+        assert!(adversary.is_active);
+
+        // Check it was added to game state
+        assert_eq!(state.adversaries.len(), 1);
+        assert!(state.adversaries.contains_key(&adversary.id));
+
+        // Check event log
+        assert_eq!(state.event_log.len(), 1);
+    }
+
+    #[test]
+    fn test_spawn_multiple_adversaries_instance_numbers() {
+        let mut state = GameState::new();
+        let pos1 = crate::protocol::Position::new(100.0, 100.0);
+        let pos2 = crate::protocol::Position::new(200.0, 100.0);
+
+        let goblin1 = state.spawn_adversary("goblin", pos1).unwrap();
+        let goblin2 = state.spawn_adversary("goblin", pos2).unwrap();
+
+        assert_eq!(goblin1.name, "Goblin #1");
+        assert_eq!(goblin2.name, "Goblin #2");
+        assert_eq!(state.adversaries.len(), 2);
+    }
+
+    #[test]
+    fn test_spawn_invalid_template() {
+        let mut state = GameState::new();
+        let position = crate::protocol::Position::new(100.0, 100.0);
+
+        let result = state.spawn_adversary("invalid_template", position);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Template not found: invalid_template");
+    }
+
+    #[test]
+    fn test_create_custom_adversary() {
+        let mut state = GameState::new();
+        let position = crate::protocol::Position::new(100.0, 100.0);
+
+        let adversary = state.create_custom_adversary(
+            "Custom Boss".to_string(),
+            position,
+            10,  // hp
+            15,  // evasion
+            5,   // armor
+            3,   // attack_modifier
+            "2d8+3".to_string(),
+        );
+
+        assert_eq!(adversary.name, "Custom Boss");
+        assert_eq!(adversary.template, "custom");
+        assert_eq!(adversary.hp, 10);
+        assert_eq!(adversary.evasion, 15);
+        assert_eq!(adversary.armor, 5);
+        assert_eq!(adversary.attack_modifier, 3);
+        assert_eq!(adversary.damage_dice, "2d8+3");
+
+        assert_eq!(state.adversaries.len(), 1);
+    }
+
+    #[test]
+    fn test_remove_adversary() {
+        let mut state = GameState::new();
+        let position = crate::protocol::Position::new(100.0, 100.0);
+
+        let adversary = state.spawn_adversary("goblin", position).unwrap();
+        let adversary_id = adversary.id.clone();
+
+        assert_eq!(state.adversaries.len(), 1);
+
+        let removed = state.remove_adversary(&adversary_id);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id, adversary_id);
+        assert_eq!(state.adversaries.len(), 0);
+
+        // Check event log (spawn + remove)
+        assert_eq!(state.event_log.len(), 2);
+    }
+
+    #[test]
+    fn test_adversary_take_damage_hp_loss() {
+        let position = crate::protocol::Position::new(100.0, 100.0);
+        let mut adversary = Adversary::custom(
+            "Test Enemy".to_string(),
+            position,
+            5, // hp
+            10, // evasion
+            2, // armor
+            1, // attack_modifier
+            "1d6".to_string(),
+        );
+
+        // Deal 1 HP damage
+        let taken_out = adversary.take_damage(1, 0);
+        assert_eq!(adversary.hp, 4);
+        assert_eq!(adversary.stress, 0);
+        assert!(!taken_out);
+        assert!(adversary.is_active);
+    }
+
+    #[test]
+    fn test_adversary_take_damage_stress_gain() {
+        let position = crate::protocol::Position::new(100.0, 100.0);
+        let mut adversary = Adversary::custom(
+            "Test Enemy".to_string(),
+            position,
+            5, // hp
+            10, // evasion
+            2, // armor
+            1, // attack_modifier
+            "1d6".to_string(),
+        );
+
+        // Deal stress damage (scratch)
+        let taken_out = adversary.take_damage(0, 1);
+        assert_eq!(adversary.hp, 5);
+        assert_eq!(adversary.stress, 1);
+        assert!(!taken_out);
+    }
+
+    #[test]
+    fn test_adversary_taken_out() {
+        let position = crate::protocol::Position::new(100.0, 100.0);
+        let mut adversary = Adversary::custom(
+            "Test Enemy".to_string(),
+            position,
+            3, // hp
+            10, // evasion
+            2, // armor
+            1, // attack_modifier
+            "1d6".to_string(),
+        );
+
+        // Reduce HP to 0
+        adversary.take_damage(3, 0);
+        assert_eq!(adversary.hp, 0);
+        assert!(adversary.is_active); // Still active until stress fills
+
+        // Fill stress to max
+        let taken_out = adversary.take_damage(0, 3);
+        assert_eq!(adversary.stress, 3);
+        assert!(taken_out);
+        assert!(!adversary.is_active);
+    }
+
+    #[test]
+    fn test_start_combat() {
+        let mut state = GameState::new();
+        
+        assert!(state.combat_encounter.is_none());
+
+        let encounter_id = state.start_combat();
+        
+        assert!(state.combat_encounter.is_some());
+        let encounter = state.combat_encounter.as_ref().unwrap();
+        assert_eq!(encounter.id, encounter_id);
+        assert!(encounter.is_active);
+        assert_eq!(encounter.round, 1);
+        assert_eq!(encounter.action_tracker.pc_tokens, 3);
+        assert_eq!(encounter.action_tracker.adversary_tokens, 3);
+        assert_eq!(encounter.action_tracker.queue.len(), 6);
+
+        // Check event log
+        assert_eq!(state.event_log.len(), 1);
+    }
+
+    #[test]
+    fn test_end_combat() {
+        let mut state = GameState::new();
+        
+        state.start_combat();
+        assert!(state.combat_encounter.is_some());
+
+        state.end_combat("victory");
+        assert!(state.combat_encounter.is_none());
+
+        // Check event log (start + end)
+        assert_eq!(state.event_log.len(), 2);
+    }
+
+    #[test]
+    fn test_action_tracker_get_next() {
+        let tracker = ActionTracker::new();
+        
+        // First token should be PC (from initial queue)
+        let next = tracker.get_next();
+        assert!(next.is_some());
+        assert_eq!(next.unwrap(), TokenType::PC);
+    }
+
+    #[test]
+    fn test_action_tracker_add_tokens() {
+        let mut tracker = ActionTracker::new();
+        
+        let initial_pc = tracker.pc_tokens;
+        let initial_adv = tracker.adversary_tokens;
+        let initial_queue_len = tracker.queue.len();
+
+        tracker.add_pc_token();
+        assert_eq!(tracker.pc_tokens, initial_pc + 1);
+        assert_eq!(tracker.queue.len(), initial_queue_len + 1);
+
+        tracker.add_adversary_token();
+        assert_eq!(tracker.adversary_tokens, initial_adv + 1);
+        assert_eq!(tracker.queue.len(), initial_queue_len + 2);
+    }
+
+    #[test]
+    fn test_update_adversary_hp() {
+        let mut state = GameState::new();
+        let position = crate::protocol::Position::new(100.0, 100.0);
+        
+        let adversary = state.spawn_adversary("goblin", position).unwrap();
+        let adversary_id = adversary.id.clone();
+
+        // Apply damage
+        let result = state.update_adversary_hp(&adversary_id, 1, 0);
+        assert!(result.is_ok());
+        assert!(!result.unwrap()); // Not taken out
+
+        let updated = state.adversaries.get(&adversary_id).unwrap();
+        assert_eq!(updated.hp, 2); // 3 - 1
+    }
+
+    #[test]
+    fn test_get_active_adversaries() {
+        let mut state = GameState::new();
+        let pos1 = crate::protocol::Position::new(100.0, 100.0);
+        let pos2 = crate::protocol::Position::new(200.0, 100.0);
+
+        let goblin1 = state.spawn_adversary("goblin", pos1).unwrap();
+        let goblin2 = state.spawn_adversary("goblin", pos2).unwrap();
+
+        // Both active
+        assert_eq!(state.get_active_adversaries().len(), 2);
+
+        // Take out goblin1
+        state.update_adversary_hp(&goblin1.id, 3, 0).ok(); // Reduce HP to 0
+        state.update_adversary_hp(&goblin1.id, 0, 3).ok(); // Fill stress
+
+        // Only goblin2 active
+        assert_eq!(state.get_active_adversaries().len(), 1);
+        assert_eq!(state.get_adversaries().len(), 2); // Both still exist
+    }
+
+    #[test]
+    fn test_all_adversary_templates_valid() {
+        use crate::adversaries::AdversaryTemplate;
+        
+        let templates = AdversaryTemplate::get_all_templates();
+        assert!(!templates.is_empty());
+
+        // Test each template can spawn
+        let mut state = GameState::new();
+        let position = crate::protocol::Position::new(100.0, 100.0);
+
+        for template in templates {
+            let result = state.spawn_adversary(&template.id, position);
+            assert!(result.is_ok(), "Failed to spawn: {}", template.id);
+            
+            let adversary = result.unwrap();
+            assert_eq!(adversary.hp, adversary.max_hp);
+            assert!(adversary.is_active);
+        }
+    }
 }
