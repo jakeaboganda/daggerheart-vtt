@@ -63,7 +63,9 @@ class WebSocketClient {
                 ? { type } 
                 : { type, payload };
             console.log('📤 Sending:', message);
-            this.ws.send(JSON.stringify(message));
+            const jsonString = JSON.stringify(message);
+            console.log('📤 JSON:', jsonString);
+            this.ws.send(jsonString);
         } else {
             console.warn('WebSocket not connected');
         }
