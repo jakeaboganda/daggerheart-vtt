@@ -84,16 +84,35 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
     // Clean up connection on disconnect
     println!("👋 Connection disconnected: {}", conn_id);
-    let mut game = state.game.write().await;
-
-    // Get controlled character before removing connection
-    let controlled_char_id = game.control_mapping.get(&conn_id).copied();
-
-    game.remove_connection(&conn_id);
-
-    // Broadcast updated characters list
-    drop(game);
-    broadcast_characters_list(&state).await;
+    
+    // Get controlled character info BEFORE removing connection
+    let (controlled_char_id, char_name) = {
+        let game = state.game.read().await;
+        let char_id = game.control_mapping.get(&conn_id).copied();
+        let name = char_id.and_then(|id| {
+            game.get_characters()
+                .iter()
+                .find(|c| c.id == id)
+                .map(|c| c.name.clone())
+        });
+        (char_id, name)
+    };
+    
+    // Remove connection from game state
+    {
+        let mut game = state.game.write().await;
+        game.remove_connection(&conn_id);
+    }
+    
+    // If they controlled a character, broadcast removal
+    if let (Some(char_id), Some(name)) = (controlled_char_id, char_name) {
+        println!("   📤 Broadcasting character removal: {} ({})", name, char_id);
+        let msg = ServerMessage::CharacterRemoved {
+            character_id: char_id.to_string(),
+            name: name.clone(),
+        };
+        let _ = state.broadcaster.send(msg.to_json());
+    }
 
     println!(
         "   Connection {} removed, controlled character: {:?}",

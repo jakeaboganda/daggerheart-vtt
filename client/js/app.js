@@ -359,6 +359,9 @@ function handleServerMessage(message) {
         case 'character_spawned':
             handleCharacterSpawned(payload);
             break;
+        case 'character_removed':
+            handleCharacterRemoved(payload);
+            break;
         case 'character_moved':
             handleCharacterMoved(payload);
             break;
@@ -496,6 +499,27 @@ function handleCharacterSpawned(payload) {
     // Add to characters list if we're on desktop
     if (!window.location.pathname.includes('mobile')) {
         addCharacterToList(character_id, name, color, is_npc);
+    }
+}
+
+function handleCharacterRemoved(payload) {
+    const { character_id, name } = payload;
+    console.log(`👋 Character removed: ${name} (${character_id})`);
+    
+    // Remove from all characters list
+    allCharacters = allCharacters.filter(c => c.id !== character_id);
+    
+    // Remove from canvas
+    if (mapCanvas) {
+        mapCanvas.removePlayer(character_id);
+    }
+    
+    // Remove from characters list if we're on desktop
+    if (!window.location.pathname.includes('mobile')) {
+        const element = document.getElementById(`character-${character_id}`);
+        if (element) {
+            element.remove();
+        }
     }
 }
 

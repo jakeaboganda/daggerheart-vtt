@@ -194,6 +194,9 @@ function handleServerMessage(message) {
         case 'character_spawned':
             handleCharacterSpawned(payload);
             break;
+        case 'character_removed':
+            handleCharacterRemoved(payload);
+            break;
         case 'character_moved':
             handleCharacterMoved(payload);
             break;
@@ -278,6 +281,23 @@ function handleCharacterSpawned(payload) {
     // Add to canvas
     if (mapCanvas) {
         mapCanvas.addPlayer(character_id, name, position, color);
+    }
+    
+    // Update sidebar
+    renderCharactersList();
+    updateSessionInfo();
+}
+
+function handleCharacterRemoved(payload) {
+    const { character_id, name } = payload;
+    console.log(`👋 Character removed: ${name} (${character_id})`);
+    
+    // Remove from characters list
+    characters = characters.filter(c => c.id !== character_id);
+    
+    // Remove from canvas
+    if (mapCanvas) {
+        mapCanvas.removePlayer(character_id);
     }
     
     // Update sidebar
