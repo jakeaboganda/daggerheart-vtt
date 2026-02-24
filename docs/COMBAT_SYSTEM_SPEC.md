@@ -1,0 +1,732 @@
+# Daggerheart Combat System - Complete Specification
+
+**Date:** 2026-02-24  
+**System:** Daggerheart (NOT D&D!)  
+**Complexity:** High (3-4 days implementation)  
+**Prerequisites:** GM Roll Requests, Event Log
+
+---
+
+## ⚠️ Daggerheart-Specific Rules
+
+Daggerheart combat is **fundamentally different** from D&D:
+
+| Feature | D&D | Daggerheart |
+|---------|-----|-------------|
+| **Turn Order** | Initiative roll, static order | **Action Tracker** - dynamic based on roll results |
+| **Success** | Beat AC | Beat Evasion, **plus** Hope vs Fear determines who goes next |
+| **Damage** | Direct HP loss | **Threshold system**: <5 = Stress, ≥5 = HP |
+| **Armor** | AC (avoid hits) | **Armor Score** (reduce damage) |
+| **Death** | 0 HP = unconscious | **0 HP, then Stress fills = taken out** |
+
+---
+
+## 🎯 Core Daggerheart Combat Flow
+
+### Phase 1: Start Combat
+1. GM clicks "Start Combat"
+2. Action Tracker appears (visual bar with tokens)
+3. GM places 3 PC tokens and 3 Adversary tokens on tracker
+4. Combat log starts
+
+### Phase 2: Action Resolution
+1. **Next token on tracker acts** (PC or Adversary)
+2. Actor declares action (attack, spell, move, etc.)
+3. Roll attack (if applicable):
+   - Roll 2d12 (Hope + Fear) + modifiers
+   - Compare total to target's **Evasion**
+   - **Success with Hope** → PC token advances on tracker
+   - **Success with Fear** → Adversary token advances
+   - **Failure** → Adversary token advances
+4. Apply damage (if hit):
+   - Roll damage dice
+   - Subtract target's **Armor Score**
+   - Apply threshold rules:
+     - **<5 damage** → 0 HP lost, +1 Stress
+     - **5-9 damage** → 1 HP lost
+     - **10-14 damage** → 2 HP lost
+     - **15+ damage** → 3 HP lost
+5. Repeat until combat ends
+
+### Phase 3: End Combat
+- All adversaries defeated OR
+- All PCs taken out OR
+- GM ends combat manually
+
+---
+
+## 📊 Action Tracker System
+
+### Visual Representation
+```
+[PC] [PC] [PC] [ADV] [ADV] [ADV]
+ ↑    →    →     →     →     ↑
+Next                      Current
+```
+
+### Token Movement Rules
+1. **PC Success with Hope:**
+   - Dealing PC token advances 1 space
+   - If at end, wraps to start
+
+2. **PC Success with Fear OR Failure:**
+   - Adversary token advances 1 space
+
+3. **Adversary Success (any):**
+   - Adversary token advances 1 space
+
+4. **Who Acts Next:**
+   - Always the **leftmost** token on the tracker
+   - Remove from tracker after acting
+   - When token pool empty, GM refills (3 PC, 3 Adversary)
+
+### GM Control
+- **Add tokens** - Increase PC or Adversary tokens
+- **Remove tokens** - Decrease tokens
+- **Reset tracker** - Start fresh
+- **End combat** - Clear tracker
+
+---
+
+## ⚔️ Attack System
+
+### Attack Roll
+**Already implemented in engine:**
+```rust
+pub struct Attack {
+    pub modifier: i8,        // Attribute + Proficiency
+    pub with_advantage: bool,
+}
+
+pub struct AttackResult {
+    pub hope: u16,           // Hope die (1-12)
+    pub fear: u16,           // Fear die (1-12)
+    pub modifier: i8,
+    pub success: bool,       // Hope > Fear
+    pub critical: bool,      // Doubles rolled
+    pub total: u16,          // Controlling die + modifier
+}
+```
+
+### Attack Process
+1. **Declare Target** - Select character on map
+2. **Calculate Modifier:**
+   - Attribute (Agility or Strength for melee/ranged)
+   - + Proficiency bonus
+   - + Situational modifiers (GM)
+3. **Roll Attack:**
+   - 2d12 (Hope + Fear)
+   - Compare Hope vs Fear → determines controlling die
+   - Add modifier to controlling die = **Total**
+4. **Compare to Evasion:**
+   - Total ≥ target's Evasion → **HIT**
+   - Total < target's Evasion → **MISS**
+5. **Determine Next Token:**
+   - Hope > Fear → PC token advances
+   - Fear > Hope OR Failure → Adversary token advances
+
+---
+
+## 💥 Damage System
+
+### Damage Calculation
+**Already implemented in engine:**
+```rust
+pub struct DamageResult {
+    pub raw_damage: u16,      // Weapon/spell damage
+    pub after_armor: u16,     // Raw - Armor Score
+    pub hp_lost: u8,          // Based on threshold
+    pub stress_gained: u8,    // If below threshold
+}
+```
+
+### Damage Thresholds
+```
+Raw Damage - Armor Score = After-Armor Damage
+
+After-Armor < 5:
+  → 0 HP lost
+  → +1 Stress
+  → "Scratch"
+
+After-Armor 5-9:
+  → 1 HP lost
+  → 0 Stress
+  → "Light wound"
+
+After-Armor 10-14:
+  → 2 HP lost
+  → 0 Stress
+  → "Serious wound"
+
+After-Armor 15+:
+  → 3 HP lost
+  → 0 Stress
+  → "Critical wound"
+```
+
+### Damage Process
+1. **Roll Damage:**
+   - Weapon/spell dice (e.g., 1d8 for longsword)
+   - Add modifiers (e.g., Strength for melee)
+2. **Apply Armor:**
+   - Subtract target's Armor Score
+   - Cannot reduce below 0
+3. **Apply Threshold:**
+   - Use table above
+   - Update HP or Stress
+4. **Check Knockout:**
+   - If HP = 0: Mark wounded, take Stress damage next
+   - If HP = 0 AND Stress = Max: **Taken Out**
+
+---
+
+## 🎬 Action Economy
+
+### Action Types
+
+#### **Major Action** (1 per turn)
+- **Attack** - Melee or ranged attack roll
+- **Spellcast** - Cast a spell with Major cost
+- **Domain Card** - Use a Major action card
+- **Disengage** - Move without opportunity attacks
+- **Dash** - Double movement speed
+
+#### **Minor Action** (1 per turn)
+- **Move** - Standard movement
+- **Interact** - Open door, pull lever, etc.
+- **Quick Action** - Use a Minor action card
+- **Draw/Stow** - Weapon or item
+
+#### **Reaction** (1 per round, triggered)
+- **Opportunity Attack** - When enemy leaves reach
+- **Defensive Action** - Use reaction card/ability
+- **Counter** - React to enemy action
+
+### Action Selection UI
+```
+┌─────────────────────────────────┐
+│ YOUR TURN                       │
+├─────────────────────────────────┤
+│ Major Action:                   │
+│  ⚔️ [Attack]  🎯 [Spellcast]   │
+│  🏃 [Dash]    🛡️ [Disengage]    │
+│                                 │
+│ Minor Action:                   │
+│  🚶 [Move]    👋 [Interact]     │
+│  🗡️ [Draw]     💼 [Stow]        │
+│                                 │
+│         [End Turn]              │
+└─────────────────────────────────┘
+```
+
+---
+
+## 🎮 Combat UI Design
+
+### TV View
+```
+┌──────────────────────────────────────────────────────────┐
+│ COMBAT: Boss Fight                           🛑 End      │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│ ┌──────────────────────────────────────────────────────┐│
+│ │ Action Tracker:                                      ││
+│ │ [PC] [PC] [ADV] [PC] [ADV] [ADV]                    ││
+│ │  ↑ Next                                              ││
+│ └──────────────────────────────────────────────────────┘│
+│                                                          │
+│ ┌──────────────────────────────────────────────────────┐│
+│ │ [MAP WITH CHARACTER TOKENS]                          ││
+│ │                                                      ││
+│ │  Theron ⚔️ ❤️3/5 ⚡3/5    Goblin 💀 ❤️2/3          ││
+│ └──────────────────────────────────────────────────────┘│
+│                                                          │
+│ ► Theron's turn                                         │
+│   Attacking Goblin...                                   │
+│   Roll: Hope 8, Fear 5 → Success with Hope!            │
+│   Damage: 7 → 5 after armor → 1 HP lost                │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Mobile View (Active Turn)
+```
+┌─────────────────────────────────┐
+│ 🎯 YOUR TURN                    │
+├─────────────────────────────────┤
+│ You: Theron ⚔️                  │
+│ ❤️ HP: 3/5  ⚡ Stress: 3/5      │
+│                                 │
+│ Target: Goblin 💀               │
+│ Evasion: 10  Armor: 2           │
+│                                 │
+│ ┌───────────────────────────┐   │
+│ │ Major Action:             │   │
+│ │  ⚔️ [Attack]              │   │
+│ │  🎯 [Spellcast]           │   │
+│ │  🏃 [Dash]                │   │
+│ └───────────────────────────┘   │
+│                                 │
+│ ┌───────────────────────────┐   │
+│ │ Minor Action:             │   │
+│ │  🚶 [Move]                │   │
+│ │  👋 [Interact]            │   │
+│ └───────────────────────────┘   │
+│                                 │
+│      [End Turn]                 │
+└─────────────────────────────────┘
+```
+
+### Mobile View (Attack Roll)
+```
+┌─────────────────────────────────┐
+│ ⚔️ ATTACK GOBLIN                │
+├─────────────────────────────────┤
+│ Your Modifier: +3               │
+│ (Agility +2, Prof +1)           │
+│                                 │
+│ Target Evasion: 10              │
+│                                 │
+│     [🎲 Roll Attack]            │
+│                                 │
+│ Or...                           │
+│ ☑️ Spend 1 Hope for +2          │
+│ ☑️ Use Advantage                │
+│                                 │
+│      [Cancel]                   │
+└─────────────────────────────────┘
+```
+
+### Mobile View (Damage Roll)
+```
+┌─────────────────────────────────┐
+│ 💥 HIT! Roll Damage             │
+├─────────────────────────────────┤
+│ Hope: 9  Fear: 5                │
+│ Total: 12 (Success with Hope!)  │
+│                                 │
+│ Weapon: Longsword (1d8)         │
+│ Modifier: +2 (Strength)         │
+│                                 │
+│     [🎲 Roll Damage]            │
+│                                 │
+│ Result will be:                 │
+│ • Rolled damage                 │
+│ • - 2 (Goblin's armor)          │
+│ • = Final damage                │
+│                                 │
+│      [Cancel]                   │
+└─────────────────────────────────┘
+```
+
+### GM View
+```
+┌─────────────────────────────────┐
+│ 🎮 Combat Control               │
+├─────────────────────────────────┤
+│ Status: Active                  │
+│ Round: 2                        │
+│                                 │
+│ Action Tracker:                 │
+│ PC tokens: 2                    │
+│ Adversary tokens: 3             │
+│                                 │
+│ [+ PC Token]  [+ Adv Token]     │
+│ [- PC Token]  [- Adv Token]     │
+│                                 │
+│ [Reset Tracker]                 │
+│ [🛑 End Combat]                 │
+│                                 │
+│ ───────────────────────────────│
+│ Combatants:                     │
+│                                 │
+│ Theron (PC) ⚔️                  │
+│ ❤️ 3/5  ⚡ 3/5                  │
+│ Evasion: 11  Armor: 3           │
+│                                 │
+│ Goblin 💀                       │
+│ ❤️ 2/3  ⚡ 0/3                  │
+│ Evasion: 10  Armor: 2           │
+│                                 │
+│ [Roll Adversary Attack]         │
+└─────────────────────────────────┘
+```
+
+---
+
+## 🔧 Implementation Plan
+
+### Phase 1: Backend (1.5 days)
+
+#### 1.1 Combat State Management
+**File:** `server/src/game.rs`
+
+```rust
+/// Combat encounter state
+pub struct CombatEncounter {
+    pub id: String,
+    pub is_active: bool,
+    pub round: u32,
+    pub action_tracker: ActionTracker,
+    pub combatants: Vec<String>,  // Character IDs
+}
+
+pub struct ActionTracker {
+    pub pc_tokens: u8,
+    pub adversary_tokens: u8,
+    pub queue: VecDeque<TokenType>,  // Order of tokens
+}
+
+pub enum TokenType {
+    PC,
+    Adversary,
+}
+
+impl GameState {
+    pub fn start_combat(&mut self) -> String;
+    pub fn end_combat(&mut self);
+    pub fn get_next_actor(&self) -> Option<TokenType>;
+    pub fn advance_tracker(&mut self, result: &AttackResult);
+    pub fn add_pc_token(&mut self);
+    pub fn add_adversary_token(&mut self);
+}
+```
+
+#### 1.2 Attack Protocol
+**File:** `server/src/protocol.rs`
+
+```rust
+// Client → Server
+ClientMessage::Attack {
+    attacker_id: String,
+    target_id: String,
+    weapon_damage_dice: String,  // "1d8"
+    spend_hope: bool,
+}
+
+ClientMessage::RollDamage {
+    attack_result_id: String,
+}
+
+ClientMessage::EndTurn {
+    character_id: String,
+}
+
+// Server → Clients
+ServerMessage::CombatStarted {
+    encounter_id: String,
+    initial_tracker: ActionTracker,
+}
+
+ServerMessage::TurnStart {
+    character_id: String,
+    character_name: String,
+    token_type: String,  // "PC" or "Adversary"
+}
+
+ServerMessage::AttackResult {
+    attack_id: String,
+    attacker_name: String,
+    target_name: String,
+    hope: u16,
+    fear: u16,
+    total: u16,
+    target_evasion: u16,
+    hit: bool,
+    controlling_die: String,  // "hope" or "fear"
+}
+
+ServerMessage::DamageResult {
+    target_name: String,
+    raw_damage: u16,
+    after_armor: u16,
+    hp_lost: u8,
+    stress_gained: u8,
+    new_hp: u8,
+    new_stress: u8,
+}
+
+ServerMessage::TrackerUpdated {
+    pc_tokens: u8,
+    adversary_tokens: u8,
+    next_token: String,  // "PC" or "Adversary"
+}
+
+ServerMessage::CombatEnded {
+    reason: String,  // "victory", "defeat", "manual"
+}
+```
+
+#### 1.3 Attack/Damage Handlers
+**File:** `server/src/websocket.rs`
+
+```rust
+async fn handle_attack(
+    state: &AppState,
+    attacker_id: String,
+    target_id: String,
+    weapon_damage: String,
+    spend_hope: bool,
+);
+
+async fn handle_roll_damage(
+    state: &AppState,
+    attack_result_id: String,
+);
+
+async fn handle_end_turn(
+    state: &AppState,
+    character_id: String,
+);
+```
+
+---
+
+### Phase 2: Frontend UI (1.5 days)
+
+#### 2.1 TV View Combat Display
+**File:** `client/index.html`
+
+```html
+<!-- Combat Header -->
+<div id="combat-header" style="display: none;">
+    <h2>⚔️ Combat Active</h2>
+    <span>Round <span id="combat-round">1</span></span>
+</div>
+
+<!-- Action Tracker -->
+<div id="action-tracker" style="display: none;">
+    <h3>Action Tracker</h3>
+    <div class="tracker-tokens" id="tracker-tokens">
+        <!-- Dynamically populated -->
+    </div>
+</div>
+
+<!-- Current Turn Display -->
+<div id="current-turn" style="display: none;">
+    <p>► <span id="current-actor">Theron</span>'s turn</p>
+</div>
+```
+
+#### 2.2 Mobile Combat Actions
+**File:** `client/mobile.html`
+
+```html
+<!-- Combat Actions Panel -->
+<section id="combat-panel" style="display: none;">
+    <h2>🎯 Your Turn</h2>
+    
+    <div id="major-actions">
+        <h3>Major Action</h3>
+        <button id="action-attack">⚔️ Attack</button>
+        <button id="action-spell">🎯 Spellcast</button>
+        <button id="action-dash">🏃 Dash</button>
+    </div>
+    
+    <div id="minor-actions">
+        <h3>Minor Action</h3>
+        <button id="action-move">🚶 Move</button>
+        <button id="action-interact">👋 Interact</button>
+    </div>
+    
+    <button id="end-turn-btn">End Turn</button>
+</section>
+
+<!-- Attack Roll Panel -->
+<section id="attack-panel" style="display: none;">
+    <h2>⚔️ Attack</h2>
+    <p>Target: <span id="attack-target">Enemy</span></p>
+    <p>Evasion: <span id="target-evasion">10</span></p>
+    <p>Your Modifier: <span id="attack-modifier">+3</span></p>
+    
+    <label>
+        <input type="checkbox" id="spend-hope-attack">
+        Spend 1 Hope for +2
+    </label>
+    
+    <button id="roll-attack-btn">🎲 Roll Attack</button>
+    <button id="cancel-attack-btn">Cancel</button>
+</section>
+
+<!-- Damage Roll Panel -->
+<section id="damage-panel" style="display: none;">
+    <h2>💥 Roll Damage</h2>
+    <p>You hit! Roll damage.</p>
+    <p>Weapon: <span id="weapon-name">Longsword</span> (1d8)</p>
+    <p>Modifier: +<span id="damage-modifier">2</span></p>
+    
+    <button id="roll-damage-btn">🎲 Roll Damage</button>
+</section>
+```
+
+#### 2.3 GM Combat Controls
+**File:** `client/gm.html`
+
+```html
+<div class="control-panel">
+    <h3>⚔️ Combat</h3>
+    
+    <button id="start-combat-btn">Start Combat</button>
+    <button id="end-combat-btn" style="display: none;">🛑 End Combat</button>
+    
+    <div id="combat-controls" style="display: none;">
+        <h4>Action Tracker</h4>
+        <p>PC Tokens: <span id="pc-tokens">3</span></p>
+        <p>Adversary Tokens: <span id="adv-tokens">3</span></p>
+        
+        <button id="add-pc-token">+ PC</button>
+        <button id="add-adv-token">+ Adversary</button>
+        <button id="remove-pc-token">- PC</button>
+        <button id="remove-adv-token">- Adversary</button>
+        
+        <button id="reset-tracker">Reset Tracker</button>
+    </div>
+</div>
+```
+
+---
+
+### Phase 3: Integration & Polish (1 day)
+
+#### 3.1 Combat Flow JavaScript
+**File:** `client/js/combat.js` (new file)
+
+```javascript
+class CombatManager {
+    constructor() {
+        this.isActive = false;
+        this.currentTurn = null;
+        this.tracker = null;
+    }
+    
+    startCombat(encounterData) {
+        // Show combat UI
+        // Initialize tracker
+        // Log event
+    }
+    
+    handleTurnStart(data) {
+        // Highlight current actor
+        // Enable actions for player
+        // Show turn indicator
+    }
+    
+    handleAttack(attackerId, targetId) {
+        // Send attack message
+        // Show attack roll UI
+    }
+    
+    handleAttackResult(result) {
+        // Display result on TV
+        // Enable damage roll if hit
+        // Update tracker
+    }
+    
+    handleDamageResult(result) {
+        // Update HP/Stress displays
+        // Log damage
+        // Advance to next turn
+    }
+    
+    endCombat(reason) {
+        // Hide combat UI
+        // Show summary
+        // Log event
+    }
+}
+```
+
+#### 3.2 Visual Feedback
+- **Attack animations** - Flash on hit
+- **Damage numbers** - Pop up on character tokens
+- **HP bars** - Real-time health updates
+- **Tracker animation** - Tokens move smoothly
+- **Turn indicator** - Highlight active character
+
+#### 3.3 Event Logging
+Every combat action logged:
+- "Combat started"
+- "Theron attacks Goblin"
+- "Hit! Hope: 9, Fear: 5"
+- "Dealt 7 damage (5 after armor) → 1 HP lost"
+- "PC token advances"
+- "Goblin's turn"
+- "Combat ended: Victory!"
+
+---
+
+## 📝 Example Combat Flow
+
+### Setup
+1. GM clicks "Start Combat"
+2. Server creates encounter
+3. Broadcasts `combat_started`
+4. Action Tracker initializes: [PC] [PC] [PC] [ADV] [ADV] [ADV]
+
+### Round 1
+1. **PC token is next** → Theron's turn starts
+2. Mobile shows "Your Turn" with actions
+3. Player taps "⚔️ Attack", selects Goblin
+4. Player taps "🎲 Roll Attack"
+5. Server rolls: Hope 9, Fear 5, Modifier +3 = 12
+6. Target Evasion 10 → **HIT**
+7. Success with Hope → **PC token advances**
+8. Mobile shows "Roll Damage"
+9. Player taps "🎲 Roll Damage"
+10. Server rolls 1d8 + 2 = 7 damage
+11. Goblin armor 2 → 5 after armor
+12. 5-9 range → **1 HP lost**
+13. Goblin HP 3 → 2
+14. Event log: "Theron hit Goblin for 5 damage (1 HP lost)"
+
+### Round 2
+1. **PC token is next** (advanced from last success) → Elara's turn
+2. (Repeat flow...)
+
+---
+
+## 🎯 Success Criteria
+
+### Must Have
+- [x] Action Tracker with PC/Adversary tokens
+- [x] Attack rolls using Duality system
+- [x] Damage calculation with thresholds
+- [x] HP and Stress tracking
+- [x] Turn-by-turn flow
+- [x] Mobile action selection
+- [x] TV combat display
+- [x] GM combat controls
+- [x] Event logging for all actions
+
+### Nice to Have
+- [ ] Opportunity attacks
+- [ ] Movement tracking
+- [ ] Range checking
+- [ ] Status effects
+- [ ] Domain card integration
+- [ ] Reaction system
+
+---
+
+## 🚀 Implementation Order
+
+1. **Day 1 Morning:** Backend combat state + action tracker
+2. **Day 1 Afternoon:** Attack/damage handlers + protocol
+3. **Day 2 Morning:** Mobile combat UI (actions, rolls)
+4. **Day 2 Afternoon:** TV combat display + tracker visualization
+5. **Day 3 Morning:** GM controls + integration
+6. **Day 3 Afternoon:** Polish + testing + bug fixes
+
+---
+
+## 📚 References
+
+- **Engine Code:** `daggerheart-engine/src/combat/`
+- **Attack System:** `attack.rs`
+- **Damage System:** `damage.rs`
+- **Duality Dice:** `core/dice/duality.rs`
+
+---
+
+**Ready to implement?** This is the full Daggerheart combat system spec, true to the game's unique mechanics!
