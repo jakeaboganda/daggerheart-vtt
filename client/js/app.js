@@ -10,6 +10,7 @@ let currentCharacter = null;
 let mapCanvas = null;
 let characterCreator = null;
 let allCharacters = []; // Store all characters for canvas repopulation
+let allAdversaries = []; // Store all adversaries for canvas repopulation
 
 // LocalStorage keys
 const STORAGE_KEYS = {
@@ -292,6 +293,16 @@ function showCharacterSheet(character) {
         console.log(`   - ${char.id.substring(0, 8)}: "${char.name}"`);
         mapCanvas.addPlayer(char.id, char.name, char.position, char.color);
     });
+    
+    // Repopulate canvas with all adversaries
+    console.log(`👹 Repopulating canvas with ${allAdversaries.length} adversaries:`);
+    allAdversaries.forEach(adv => {
+        console.log(`   - ${adv.id.substring(0, 8)}: "${adv.name}"`);
+        mapCanvas.drawAdversary(adv.id, adv.name, adv.position.x, adv.position.y);
+        if (adv.hp !== undefined && adv.max_hp !== undefined) {
+            mapCanvas.updateAdversaryHP(adv.id, adv.hp, adv.max_hp);
+        }
+    });
 }
 
 function updateCharacterSheet(character) {
@@ -471,7 +482,10 @@ function handleAdversariesList(payload) {
     const { adversaries } = payload;
     console.log('👹 Adversaries list received:', adversaries);
     
-    // Add all adversaries to canvas
+    // Store adversaries for later use
+    allAdversaries = adversaries;
+    
+    // Add all adversaries to canvas (if it exists)
     if (mapCanvas) {
         adversaries.forEach(adv => {
             mapCanvas.drawAdversary(adv.id, adv.name, adv.position.x, adv.position.y);
@@ -479,9 +493,10 @@ function handleAdversariesList(payload) {
                 mapCanvas.updateAdversaryHP(adv.id, adv.hp, adv.max_hp);
             }
         });
+        console.log('👹 Total adversaries on canvas:', mapCanvas?.adversaryPositions?.size || 0);
+    } else {
+        console.log('👹 Canvas not ready yet, adversaries stored for later');
     }
-    
-    console.log('👹 Total adversaries on canvas:', mapCanvas?.adversaryPositions?.size || 0);
 }
 
 function handleCharacterSelected(payload) {
@@ -935,11 +950,30 @@ function handleGameEvent(payload) {
 
 // Adversary Handlers
 function handleAdversarySpawned(payload) {
-    const { adversary_id, name, position } = payload;
+    const { adversary_id, name, position, template, hp, max_hp, evasion, armor, attack_modifier, damage_dice } = payload;
     console.log(`👹 Adversary spawned: ${name} at (${position.x}, ${position.y})`);
+    
+    // Add to allAdversaries list
+    allAdversaries.push({
+        id: adversary_id,
+        name,
+        template,
+        position,
+        hp,
+        max_hp,
+        stress: 0,
+        evasion,
+        armor,
+        attack_modifier,
+        damage_dice,
+        is_active: true,
+    });
     
     if (mapCanvas) {
         mapCanvas.drawAdversary(adversary_id, name, position.x, position.y);
+        if (hp !== undefined && max_hp !== undefined) {
+            mapCanvas.updateAdversaryHP(adversary_id, hp, max_hp);
+        }
     }
 }
 
@@ -947,18 +981,29 @@ function handleAdversaryRemoved(payload) {
     const { adversary_id, name } = payload;
     console.log(`💀 Adversary removed: ${name}`);
     
+    // Remove from allAdversaries list
+    allAdversaries = allAdversaries.filter(adv => adv.id !== adversary_id);
+    
     if (mapCanvas) {
         mapCanvas.removeAdversary(adversary_id);
     }
 }
 
 function handleAdversaryUpdated(payload) {
-    const { adversary_id, hp } = payload;
-    console.log(`🩸 Adversary ${adversary_id} updated: HP ${hp}`);
+    const { adversary_id, hp, stress } = payload;
+    console.log(`🩸 Adversary ${adversary_id} updated: HP ${hp}, Stress ${stress}`);
     
-    if (mapCanvas && payload.hp !== undefined) {
-        // Assuming max_hp is sent or we track it
-        mapCanvas.updateAdversaryHP(adversary_id, hp, payload.max_hp || hp);
+    // Update in allAdversaries list
+    const adv = allAdversaries.find(a => a.id === adversary_id);
+    if (adv) {
+        if (hp !== undefined) adv.hp = hp;
+        if (stress !== undefined) adv.stress = stress;
+        if (payload.is_active !== undefined) adv.is_active = payload.is_active;
+    }
+    
+    if (mapCanvas && hp !== undefined) {
+        const maxHp = adv?.max_hp || hp;
+        mapCanvas.updateAdversaryHP(adversary_id, hp, maxHp);
     }
 }
 
