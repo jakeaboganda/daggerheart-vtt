@@ -7,6 +7,9 @@ const PLAYER_RADIUS = 20;
 
 class MapCanvas {
     constructor(canvasId) {
+        console.log(`🎨 MapCanvas constructor called for: ${canvasId}`);
+        console.trace('MapCanvas creation stack trace');
+        
         this.canvas = document.getElementById(canvasId);
         if (!this.canvas) {
             console.error('Canvas element not found:', canvasId);
@@ -16,6 +19,7 @@ class MapCanvas {
         this.ctx = this.canvas.getContext('2d');
         this.players = new Map(); // character_id -> character data (keeping "players" var name for compatibility)
         this.animating = new Map(); // character_id -> animation state
+        this.adversaryPositions = new Map(); // Initialize adversaries map in constructor
         
         // Set canvas size
         this.canvas.width = MAP_WIDTH;

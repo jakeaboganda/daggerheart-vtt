@@ -439,7 +439,8 @@ function handleConnected(payload) {
 
 function handleCharactersList(payload) {
     const { characters } = payload;
-    console.log('Characters list:', characters);
+    console.log('📋 Characters list received:', characters);
+    console.log('📋 Current adversaries on canvas:', mapCanvas?.adversaryPositions?.size || 0);
     
     // Store characters for later use
     allCharacters = characters;
@@ -456,6 +457,8 @@ function handleCharactersList(payload) {
     if (!window.location.pathname.includes('mobile')) {
         updateCharactersList(characters);
     }
+    
+    console.log('📋 Adversaries after update:', mapCanvas?.adversaryPositions?.size || 0);
 }
 
 function handleCharacterSelected(payload) {

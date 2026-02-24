@@ -605,11 +605,11 @@ async fn send_characters_list(
 }
 
 /// Broadcast characters list to all connections
-async fn broadcast_characters_list(_state: &AppState) {
-    // We can't personalize broadcasts, so we'll send a generic list
-    // Clients will need to request full details separately if needed
-    // For now, just notify that the list changed
-    // TODO: This could be optimized by sending the full list to each connection individually
+async fn broadcast_characters_list(state: &AppState) {
+    println!("📡 Broadcasting characters list to all connections...");
+    // Note: We cannot personalize this broadcast (each connection needs different control info)
+    // For now, we just don't send anything - clients stay with their current state    // TODO: Could send individual messages to each connection with personalized data
+    // or send a generic "refresh" signal
 }
 
 /// Build character list with control information for a specific connection
