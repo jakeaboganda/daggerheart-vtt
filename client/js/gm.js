@@ -235,6 +235,12 @@ function handleServerMessage(message) {
         case 'tracker_updated':
             handleTrackerUpdated(payload);
             break;
+        case 'attack_result':
+            handleAttackResult(payload);
+            break;
+        case 'damage_result':
+            handleDamageResult(payload);
+            break;
         default:
             console.log('GM received:', type, payload);
     }
@@ -567,6 +573,7 @@ async function loadEventHistory() {
 
 let adversaries = [];
 let spawnMode = false;
+let selectedAttackerId = null; // For click-to-attack combat
 
 // Add adversary event listeners to setupEventListeners
 (function() {
@@ -613,16 +620,89 @@ let spawnMode = false;
     const originalHandleCanvasClick = window.handleCanvasClick || function() {};
     window.handleCanvasClick = function(x, y) {
         if (spawnMode) {
+            // Spawning adversaries
             spawnAdversaryAtPosition(x, y);
             spawnMode = false;
             const btn = document.getElementById('spawn-adversary-btn');
             btn.textContent = '➕ Click Map to Spawn';
             btn.style.background = '';
+        } else if (combatActive) {
+            // Combat mode - click to attack
+            handleCombatClick(x, y);
         } else {
             originalHandleCanvasClick(x, y);
         }
     };
 })();
+
+// ===== Combat Click-to-Attack =====
+
+function handleCombatClick(x, y) {
+    // Check if clicked on a character
+    const character = mapCanvas.getCharacterAtPosition(x, y);
+    if (character) {
+        // Select as attacker
+        selectedAttackerId = character.id;
+        mapCanvas.setSelectedAttacker(character.id);
+        console.log(`🎯 Selected attacker: ${character.name}`);
+        showCombatFeedback(`Selected: ${character.name}. Click an enemy to attack!`);
+        return;
+    }
+    
+    // Check if clicked on an adversary
+    const adversary = mapCanvas.getAdversaryAtPosition(x, y);
+    if (adversary && selectedAttackerId) {
+        // Attack!
+        console.log(`⚔️ Attacking ${adversary.name} with ${selectedAttackerId}`);
+        rollAttack(selectedAttackerId, adversary.id);
+        return;
+    }
+    
+    // Clicked empty space - clear selection
+    if (!character && !adversary) {
+        selectedAttackerId = null;
+        mapCanvas.clearSelectedAttacker();
+        hideCombatFeedback();
+    }
+}
+
+function rollAttack(attackerId, targetId) {
+    // Get attacker name for display
+    const attacker = characters.find(c => c.id === attackerId);
+    const target = adversaries.find(a => a.id === targetId);
+    
+    if (!attacker || !target) {
+        console.error('Attacker or target not found');
+        return;
+    }
+    
+    showCombatFeedback(`${attacker.name} attacks ${target.name}...`);
+    
+    // Send attack message
+    ws.send('attack', {
+        attacker_id: attackerId,
+        target_id: targetId,
+        modifier: 0, // TODO: Add modifier UI
+        with_advantage: false // TODO: Add advantage checkbox
+    });
+}
+
+function showCombatFeedback(message) {
+    const feedback = document.getElementById('combat-feedback');
+    if (feedback) {
+        feedback.textContent = message;
+        feedback.style.display = 'block';
+    }
+}
+
+function hideCombatFeedback() {
+    const feedback = document.getElementById('combat-feedback');
+    if (feedback) {
+        feedback.style.display = 'none';
+    }
+}
+
+// ===== Adversary Spawning =====
 
 function spawnAdversaryAtPosition(x, y) {
     const template = document.getElementById('adversary-template').value;
@@ -808,6 +888,9 @@ function handleCombatStarted(payload) {
     document.getElementById('pc-tokens').textContent = pc_tokens;
     document.getElementById('adv-tokens').textContent = adversary_tokens;
     
+    // Show combat mode feedback
+    showCombatFeedback('⚔️ Combat Mode Active - Click character, then click enemy to attack!');
+    
     console.log(`⚔️ Combat started! Encounter: ${encounter_id}`);
 }
 
@@ -820,6 +903,11 @@ function handleCombatEnded(payload) {
     document.getElementById('start-combat-btn').style.display = 'block';
     document.getElementById('end-combat-btn').style.display = 'none';
     document.getElementById('combat-controls').style.display = 'none';
+    
+    // Clear combat mode feedback
+    hideCombatFeedback();
+    selectedAttackerId = null;
+    mapCanvas.clearSelectedAttacker();
     
     console.log(`✅ Combat ended: ${reason}`);
 }
@@ -843,3 +931,144 @@ function resetTracker() {
     // TODO: Implement reset tracker
     console.log('Reset tracker not yet implemented');
 }
+
+// ===== Combat Result Handlers =====
+
+let lastAttackResult = null;
+
+function handleAttackResult(payload) {
+    const { attacker_name, target_name, hope, fear, total, target_evasion, hit, controlling_die, is_critical } = payload;
+    
+    console.log('⚔️ Attack result:', payload);
+    lastAttackResult = payload;
+    
+    // Build result HTML
+    let resultHTML = `
+        <p><strong>${attacker_name}</strong> attacks <strong>${target_name}</strong></p>
+        <div style="display: flex; gap: 1rem; justify-content: center; margin: 1rem 0; font-size: 1.5rem;">
+            <div style="text-align: center;">
+                <div style="color: #3498db;">Hope</div>
+                <div style="font-size: 2rem; font-weight: bold;">${hope}</div>
+            </div>
+            <div style="text-align: center;">
+                <div style="color: #e74c3c;">Fear</div>
+                <div style="font-size: 2rem; font-weight: bold;">${fear}</div>
+            </div>
+        </div>
+        <p style="font-size: 1.2rem;">Total: <strong>${total}</strong> vs Evasion <strong>${target_evasion}</strong></p>
+        <p style="font-size: 1.3rem; font-weight: bold; color: ${hit ? '#2ecc71' : '#e74c3c'};">
+            ${hit ? '✅ HIT!' : '❌ MISS!'}
+            ${is_critical ? ' 🌟 CRITICAL!' : ''}
+        </p>
+        <p style="font-style: italic;">Controlling Die: ${controlling_die === 'hope' ? '🔵 Hope' : '🔴 Fear'}</p>
+    `;
+    
+    // Show overlay
+    const overlay = document.getElementById('combat-result-overlay');
+    const content = document.getElementById('combat-result-content');
+    const damageBtn = document.getElementById('roll-damage-btn');
+    
+    content.innerHTML = resultHTML;
+    overlay.style.display = 'block';
+    
+    // Show damage button if hit
+    if (hit) {
+        damageBtn.style.display = 'block';
+        damageBtn.onclick = () => rollDamageForLastAttack();
+    } else {
+        damageBtn.style.display = 'none';
+    }
+    
+    // Clear attacker selection
+    selectedAttackerId = null;
+    mapCanvas.clearSelectedAttacker();
+    hideCombatFeedback();
+}
+
+function handleDamageResult(payload) {
+    const { target_name, raw_damage, after_armor, hp_lost, stress_gained, new_hp, new_stress, taken_out } = payload;
+    
+    console.log('💥 Damage result:', payload);
+    
+    // Build result HTML
+    let resultHTML = `
+        <h3>💥 Damage to ${target_name}</h3>
+        <p style="font-size: 1.1rem;">Raw Damage: <strong>${raw_damage}</strong></p>
+        <p style="font-size: 1.1rem;">After Armor: <strong>${after_armor}</strong></p>
+        <hr style="border-color: var(--accent); margin: 0.75rem 0;">
+        <p>HP Lost: <strong style="color: #e74c3c;">${hp_lost}</strong></p>
+        <p>Stress Gained: <strong style="color: #f39c12;">${stress_gained}</strong></p>
+        <p>New HP: <strong>${new_hp}</strong> | New Stress: <strong>${new_stress}</strong></p>
+        ${taken_out ? '<p style="font-size: 1.3rem; font-weight: bold; color: #e74c3c;">💀 TAKEN OUT!</p>' : ''}
+    `;
+    
+    // Show overlay
+    const overlay = document.getElementById('combat-result-overlay');
+    const content = document.getElementById('combat-result-content');
+    const damageBtn = document.getElementById('roll-damage-btn');
+    const title = document.getElementById('combat-result-title');
+    
+    title.textContent = '💥 Damage Result';
+    content.innerHTML = resultHTML;
+    damageBtn.style.display = 'none';
+    overlay.style.display = 'block';
+}
+
+function rollDamageForLastAttack() {
+    if (!lastAttackResult) {
+        console.error('No attack result to roll damage for');
+        return;
+    }
+    
+    const { attacker_id, target_id } = lastAttackResult;
+    
+    // Find adversary to get damage dice
+    const attacker = adversaries.find(a => a.id === attacker_id);
+    const character = characters.find(c => c.id === attacker_id);
+    
+    let damageDice = '1d6'; // Default
+    let armor = 0;
+    
+    // Get damage dice from attacker
+    if (attacker) {
+        damageDice = attacker.damage_dice || '1d6';
+    } else if (character) {
+        // TODO: Get character weapon damage
+        damageDice = '1d8'; // Placeholder
+    }
+    
+    // Get armor from target
+    const targetAdv = adversaries.find(a => a.id === target_id);
+    const targetChar = characters.find(c => c.id === target_id);
+    
+    if (targetAdv) {
+        armor = targetAdv.armor || 0;
+    } else if (targetChar) {
+        // TODO: Get character armor
+        armor = 1; // Placeholder
+    }
+    
+    console.log(`🎲 Rolling damage: ${damageDice} against armor ${armor}`);
+    
+    ws.send('roll_damage', {
+        attacker_id,
+        target_id,
+        damage_dice: damageDice,
+        armor
+    });
+}
+
+// Close result overlay
+document.addEventListener('DOMContentLoaded', () => {
+    const closeBtn = document.getElementById('close-result-btn');
+    if (closeBtn) {
+        closeBtn.onclick = () => {
+            const overlay = document.getElementById('combat-result-overlay');
+            overlay.style.display = 'none';
+            lastAttackResult = null;
+        };
+    }
+});
+
+// ===== End Combat Result Handlers =====
+

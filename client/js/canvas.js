@@ -20,6 +20,7 @@ class MapCanvas {
         this.players = new Map(); // character_id -> character data (keeping "players" var name for compatibility)
         this.animating = new Map(); // character_id -> animation state
         this.adversaryPositions = new Map(); // Initialize adversaries map in constructor
+        this.selectedAttackerId = null; // Track selected attacker for combat
         
         // Set canvas size
         this.canvas.width = MAP_WIDTH;
@@ -146,7 +147,18 @@ class MapCanvas {
     }
     
     drawPlayer(player) {
-        const { position, color, name } = player;
+        const { position, color, name, id } = player;
+        
+        // Draw selection ring if this is the selected attacker
+        if (this.selectedAttackerId === id) {
+            this.ctx.strokeStyle = '#FFD700'; // Gold
+            this.ctx.lineWidth = 4;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.beginPath();
+            this.ctx.arc(position.x, position.y, PLAYER_RADIUS + 8, 0, Math.PI * 2);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]); // Reset dash
+        }
         
         // Draw glow
         this.ctx.shadowBlur = 15;
@@ -290,5 +302,53 @@ class MapCanvas {
                 this.drawAdversaryToken(adv.name, adv.x, adv.y, adv.hp, adv.maxHp);
             });
         }
+    }
+    
+    // ===== Combat Click Detection =====
+    
+    // Check if click hit a character
+    getCharacterAtPosition(x, y) {
+        const CLICK_RADIUS = PLAYER_RADIUS + 5; // Slightly bigger hitbox
+        
+        for (const [id, player] of this.players) {
+            const dx = x - player.position.x;
+            const dy = y - player.position.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance <= CLICK_RADIUS) {
+                return { id, name: player.name };
+            }
+        }
+        return null;
+    }
+    
+    // Check if click hit an adversary
+    getAdversaryAtPosition(x, y) {
+        const CLICK_RADIUS = 25; // Adversary click radius
+        
+        if (!this.adversaryPositions) return null;
+        
+        for (const [id, adv] of this.adversaryPositions) {
+            const dx = x - adv.x;
+            const dy = y - adv.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance <= CLICK_RADIUS) {
+                return { id, name: adv.name };
+            }
+        }
+        return null;
+    }
+    
+    // Set selected attacker (highlights them)
+    setSelectedAttacker(characterId) {
+        this.selectedAttackerId = characterId;
+        this.render();
+    }
+    
+    // Clear selected attacker
+    clearSelectedAttacker() {
+        this.selectedAttackerId = null;
+        this.render();
     }
 }

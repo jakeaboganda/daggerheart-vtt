@@ -291,6 +291,23 @@
         
         <!-- Main Area: Map View -->
         <main class="gm-main">
+            <!-- Combat Feedback Banner -->
+            <div id="combat-feedback" style="display: none; background: #3498db; color: white; padding: 0.75rem; text-align: center; font-weight: bold; border-radius: 4px; margin-bottom: 0.5rem;">
+                Select an attacker...
+            </div>
+            
+            <!-- Combat Result Overlay -->
+            <div id="combat-result-overlay" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-dark); border: 3px solid #3498db; border-radius: 8px; padding: 1.5rem; min-width: 400px; max-width: 500px; z-index: 1000; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                <h2 id="combat-result-title" style="margin-top: 0; color: var(--accent);">⚔️ Attack Roll</h2>
+                <div id="combat-result-content" style="font-size: 1.1rem; margin: 1rem 0;">
+                    <!-- Attack result content -->
+                </div>
+                <div id="combat-result-buttons" style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button id="roll-damage-btn" class="btn-primary" style="display: none;">💥 Roll Damage</button>
+                    <button id="close-result-btn" class="btn-secondary">Close</button>
+                </div>
+            </div>
+            
             <div class="control-panel">
                 <h2>🗺️ Game Map</h2>
                 <canvas id="gm-canvas"></canvas>
@@ -314,7 +331,7 @@
     </div>
 
     <script src="/static/js/websocket.js?v=10"></script>
-    <script src="/static/js/canvas.js?v=8"></script>
-    <script src="/static/js/gm.js?v=10"></script>
+    <script src="/static/js/canvas.js?v=12"></script>
+    <script src="/static/js/gm.js?v=12"></script>
 </body>
 </html>
